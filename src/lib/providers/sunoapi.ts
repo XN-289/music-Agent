@@ -1,0 +1,256 @@
+// sunoapi.org（Kie.ai）Suno 第三方 API 适配器 —— P1 真实生成后端。
+// 规范来源：https://docs.sunoapi.org/suno-api/suno-api.json + 文档页（2026-08-18 抓取）。
+// 要点：
+//  - 所有任务都是「提交 → 轮询 record-info」异步模型，与 Provider 接口的 job 语义一致
+//  - 模型：V4 / V4_5 / V4_5PLUS / V4_5ALL / V5 / V5_5（默认 V4_5ALL）
+//  - extend 仅支持向后延续（continueAt）；前置延长不支持
+//  - cover 需要上传型输入（uploadUrl）：适配器内部用源音频 URL 走 file-url-upload 中转
+//  - replace-section 需要原始 taskId + fullLyrics + infill 区间，由调用层从 DB 补全
+
+import { UnsupportedFeatureError, type ExtendInput, type GenerateMusicInput, type GenerateResult, type IterationInput, type JobInfo, type ProviderCapability, type ReplaceSectionInput, type SongVariant, type SunoProvider } from './types';
+
+const DEFAULT_MODEL = 'V4_5ALL';
+const UPLOAD_BASE = 'https://sunoapiorg.redpandaai.co';
+
+function baseUrl(): string {
+  return process.env.SUNO_API_BASE ?? 'https://api.sunoapi.org';
+}
+
+function apiKey(): string {
+  return process.env.SUNO_API_KEY ?? '';
+}
+
+class ApiError extends Error {
+  constructor(
+    public readonly code: number | string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function api<T = unknown>(
+  path: string,
+  opts?: { method?: string; body?: unknown; rawUrl?: string },
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(opts?.rawUrl ?? `${baseUrl()}${path}`, {
+      method: opts?.method ?? (opts?.body ? 'POST' : 'GET'),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey()}`,
+      },
+      body: opts?.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch (e) {
+    throw new ApiError('network', `网络错误: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const json = (await res.json().catch(() => null)) as {
+    code?: number | string;
+    msg?: string;
+    data?: T;
+  } | null;
+  if (!json || json.code !== 200) {
+    throw new ApiError(json?.code ?? res.status, `${json?.msg ?? '请求失败'}（HTTP ${res.status}）`);
+  }
+  return json.data as T;
+}
+
+// 任务状态 → 我们的 Job 状态（无真实进度百分比，按阶段合成）
+const STATUS_MAP: Record<string, { status: JobInfo['status']; progress: number; stage: string }> = {
+  PENDING: { status: 'processing', progress: 10, stage: '排队中' },
+  TEXT_SUCCESS: { status: 'processing', progress: 40, stage: '生成歌词与结构中' },
+  FIRST_SUCCESS: { status: 'processing', progress: 80, stage: '渲染完整音频中' },
+  SUCCESS: { status: 'success', progress: 100, stage: '完成' },
+};
+
+export class SunoApiProvider implements SunoProvider {
+  readonly id = 'sunoapi';
+  readonly displayName = 'sunoapi.org（Suno V4/V4.5/V5 第三方 API）';
+  readonly capabilities = new Set<ProviderCapability>([
+    'generate',
+    'customGenerate',
+    'instrumental',
+    'generateLyrics',
+    'extend',
+    'cover',
+    'replaceSection',
+    'stems',
+    'personas',
+    'alignedLyrics',
+    'mashup',
+  ]);
+
+  async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
+    const customMode = !!input.lyrics;
+    const body: Record<string, unknown> = {
+      customMode,
+      instrumental: input.instrumental ?? false,
+      model: input.model ?? DEFAULT_MODEL,
+    };
+    if (customMode) {
+      // custom 模式：prompt 即歌词（逐字演唱），style/title 必填
+      body.prompt = input.lyrics;
+      body.style = input.styleTags.join(', ') || 'Pop';
+      body.title = input.title;
+    } else {
+      // 非 custom 模式：只有 prompt 起作用，style/title 应留空
+      if (!input.prompt?.trim()) {
+        throw new Error('非歌词模式必须提供 prompt 风格描述');
+      }
+      body.prompt = input.prompt;
+    }
+    const data = await api<{ taskId: string }>('/api/v1/generate', { body });
+    return { jobId: data.taskId };
+  }
+
+  async extend(input: ExtendInput): Promise<GenerateResult> {
+    // sunoapi 的 extend 只能向后延续（continueAt 指定续写起点）
+    if (input.direction === 'start') {
+      throw new UnsupportedFeatureError(this.id, 'extend:start（前置延长，需换用 upload-cover 变通）');
+    }
+    const hasCustom = !!(input.prompt || input.title);
+    const body: Record<string, unknown> = {
+      audioId: input.audioId,
+      // 无自定义参数时用源曲参数续写（defaultParamFlag:false）；有自定义时 style/continueAt 必填
+      defaultParamFlag: hasCustom,
+      model: DEFAULT_MODEL,
+    };
+    if (hasCustom) {
+      body.prompt = input.prompt ?? ''; // instrumental 缺省时 prompt 必填；暂按非纯音乐处理
+      body.style = input.styleTags?.join(', ') || 'Pop';
+      body.title = input.title;
+      if (input.continueAt != null && input.continueAt > 0) {
+        body.continueAt = input.continueAt;
+      }
+    }
+    const data = await api<{ taskId: string }>('/api/v1/generate/extend', { body });
+    return { jobId: data.taskId };
+  }
+
+  async cover(input: IterationInput): Promise<GenerateResult> {
+    if (!input.sourceAudioUrl) {
+      throw new Error('cover 需要源音频 URL（sourceAudioUrl）');
+    }
+    // 第一步：源音频 URL → 平台文件（上传服务是独立域名；fileUrl/downloadUrl 双字段兼容）
+    const upload = await api<{ fileUrl?: string; downloadUrl?: string }>('/api/file-url-upload', {
+      rawUrl: `${UPLOAD_BASE}/api/file-url-upload`,
+      body: {
+        fileUrl: input.sourceAudioUrl,
+        uploadPath: 'covers',
+        fileName: `${input.title ?? 'cover'}.mp3`,
+      },
+    });
+    const uploadUrl = upload.fileUrl ?? upload.downloadUrl;
+    if (!uploadUrl) {
+      throw new Error('上传服务未返回文件 URL');
+    }
+    // 第二步：upload-cover。
+    // 注意 customMode 语义：true 时 prompt 会被逐字演唱。只有提供真实歌词才用 custom，
+    // 否则用非 custom 模式把 prompt 当风格描述（避免把指令唱出来）。
+    const customMode = !!input.lyrics;
+    const body: Record<string, unknown> = {
+      uploadUrl,
+      customMode,
+      instrumental: false,
+      model: DEFAULT_MODEL,
+    };
+    if (customMode) {
+      body.prompt = input.lyrics;
+      body.style = input.styleTags?.join(', ') || 'Pop';
+      body.title = input.title ?? 'Cover';
+    } else {
+      body.prompt = input.prompt ?? 'Restyle this song in a fresh arrangement';
+    }
+    const data = await api<{ taskId: string }>('/api/v1/generate/upload-cover', { body });
+    return { jobId: data.taskId };
+  }
+
+  async replaceSection(input: ReplaceSectionInput): Promise<GenerateResult> {
+    if (!input.taskId || input.infillStartS == null || input.infillEndS == null || !input.fullLyrics) {
+      throw new Error('replace-section 需要 taskId / infillStartS / infillEndS / fullLyrics');
+    }
+    const data = await api<{ taskId: string }>('/api/v1/generate/replace-section', {
+      body: {
+        taskId: input.taskId,
+        audioId: input.audioId,
+        prompt: input.prompt ?? 'Rewrite this section',
+        tags: input.styleTags?.join(', ') ?? 'Pop',
+        title: input.title ?? 'Edited Song',
+        infillStartS: input.infillStartS,
+        infillEndS: input.infillEndS,
+        fullLyrics: input.fullLyrics,
+      },
+    });
+    return { jobId: data.taskId };
+  }
+
+  async getCredits(): Promise<{ credits: number }> {
+    const credits = await api<number>('/api/v1/generate/credit');
+    return { credits };
+  }
+
+  async getJob(jobId: string): Promise<JobInfo<SongVariant[]>> {
+    try {
+      const d = await api<{
+        status: string;
+        errorMessage?: string;
+        // 兼容两种响应形状：文档旧例 response.data[]（snake_case）与 OpenAPI sunoData[]（camelCase）
+        response?: {
+          data?: TrackInfo[];
+          sunoData?: TrackInfo[];
+        };
+      }>(`/api/v1/generate/record-info?taskId=${encodeURIComponent(jobId)}`);
+
+      const tracks = (d.response?.sunoData ?? d.response?.data ?? []).filter(Boolean);
+      const variants: SongVariant[] = tracks.map((t, i) => ({
+        id: `v${i}`,
+        audioUrl: t.audioUrl ?? t.audio_url ?? t.streamAudioUrl ?? t.stream_audio_url ?? '',
+        title: t.title ?? '',
+        durationSec: Math.round(t.duration ?? 0),
+        audioId: t.id,
+      }));
+
+      const mapped = STATUS_MAP[d.status];
+      if (mapped) {
+        return {
+          id: jobId,
+          ...mapped,
+          result: mapped.status === 'success' ? variants : variants.length ? variants : undefined,
+        };
+      }
+      if (d.status === 'SENSITIVE_WORD_ERROR') {
+        return { id: jobId, status: 'failed', progress: 100, stage: '内容审核未通过', error: d.errorMessage ?? '敏感词拦截' };
+      }
+      return { id: jobId, status: 'failed', progress: 100, stage: '生成失败', error: d.errorMessage ?? d.status };
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'network') {
+        // 网络抖动：保持 processing，等待下次轮询（不要把任务误判为失败）
+        return { id: jobId, status: 'processing', progress: 5, stage: '查询任务状态中…' };
+      }
+      if (e instanceof ApiError && (e.code === 429 || (typeof e.code === 'number' && e.code >= 500))) {
+        // 限流/服务端临时错误：保持 processing（任务可能仍在生成，终态只认 provider 状态枚举）
+        return { id: jobId, status: 'processing', progress: 5, stage: '上游繁忙，重试中…' };
+      }
+      return {
+        id: jobId,
+        status: 'failed',
+        progress: 100,
+        stage: '查询失败',
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+}
+
+type TrackInfo = {
+  id?: string;
+  audioUrl?: string;
+  audio_url?: string;
+  streamAudioUrl?: string;
+  stream_audio_url?: string;
+  title?: string;
+  duration?: number;
+};
