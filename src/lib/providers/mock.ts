@@ -233,6 +233,18 @@ export class MockSunoProvider implements SunoProvider {
 
   async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
     const jobId = crypto.randomUUID();
+    // 敏感词测试通道：歌词含【敏感词测试】时立即失败，用于演示/测试 Agent 修复闭环
+    if (input.lyrics?.includes('【敏感词测试】')) {
+      this.jobs.set(jobId, {
+        id: jobId,
+        status: 'failed',
+        progress: 100,
+        stage: '内容审核未通过',
+        error: 'SENSITIVE_WORD_ERROR：歌词包含敏感表述',
+      });
+      this.persistJobs();
+      return { jobId };
+    }
     this.jobs.set(jobId, { id: jobId, status: 'pending', progress: 0, stage: '排队中' });
     void this.runJob(jobId, input, `gen:${jobId}`);
     return { jobId };

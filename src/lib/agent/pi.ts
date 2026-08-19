@@ -26,6 +26,7 @@ import { getProvider } from '@/lib/providers';
 import { SYSTEM_PROMPT } from './prompt';
 import {
   commitIteration,
+  getSongForAgent,
   resolveSongForIteration,
   submitGeneration,
 } from './generate-song';
@@ -182,11 +183,43 @@ const replaceSectionToolDef = defineTool({
   },
 }) as ToolDefinition;
 
+const inspectSongToolDef = defineTool({
+  name: 'inspect_song',
+  label: '查看歌曲状态',
+  description:
+    '查询一首歌的当前状态、失败原因与变体信息。用于：诊断生成失败、对比两个变体、确认段落替换的时间区间、决定下一步迭代。songId 来自之前工具的结果。',
+  promptSnippet: 'inspect_song(songId) → { status, error, variants, lyrics }',
+  parameters: Type.Object({
+    songId: Type.String({ description: '歌曲 id' }),
+  }),
+  execute: async (_toolCallId, params) => {
+    const info = await getSongForAgent(params.songId);
+    if (!info) {
+      return {
+        content: [{ type: 'text', text: '歌曲不存在，请让用户确认 songId' }],
+        details: { songId: params.songId, status: null, error: null },
+      };
+    }
+    const lines = [
+      `标题：${info.title}`,
+      `状态：${info.status}${info.error ? `（失败原因：${info.error}）` : ''}`,
+      `风格标签：${info.styleTags?.join(', ') ?? '无'}`,
+      `变体：${info.variants.map((v) => `${v.id}「${v.title}」${v.durationSec}s`).join('；') || '暂无'}`,
+      `歌词：${info.lyrics ?? '无'}`,
+    ];
+    return {
+      content: [{ type: 'text', text: lines.join('\n') }],
+      details: { songId: params.songId, status: info.status, error: info.error },
+    };
+  },
+}) as ToolDefinition;
+
 const CUSTOM_TOOLS: ToolDefinition[] = [
   generateMusicToolDef,
   extendMusicToolDef,
   coverMusicToolDef,
   replaceSectionToolDef,
+  inspectSongToolDef,
 ];
 
 // ---------- 会话单例 ----------

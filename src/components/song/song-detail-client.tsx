@@ -185,7 +185,15 @@ export function SongDetailClient({
         </div>
       )}
       {song.status === "failed" && (
-        <p className="mt-6 text-sm text-destructive">{song.error ?? "生成失败"}</p>
+        <div className="mt-6 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+          <p className="text-sm text-destructive">生成失败：{song.error ?? "未知原因"}</p>
+          <Link
+            href="/"
+            className="mt-2 inline-block text-sm text-primary underline-offset-4 hover:underline"
+          >
+            让 Agent 帮你诊断修复 →
+          </Link>
+        </div>
       )}
 
       {active && (

@@ -132,3 +132,19 @@ export async function resolveSongForIteration(songId: string) {
   )[0];
   return { song, variant, taskId: job?.id ?? null, providerId: job?.providerId ?? null, activeProviderId: provider.id };
 }
+
+/** Agent 视角的歌曲信息（inspect_song 工具用）：诊断失败、对比变体、决定下一步 */
+export async function getSongForAgent(songId: string) {
+  const song = (await db.select().from(schema.songs).where(eq(schema.songs.id, songId)))[0];
+  if (!song) return null;
+  return {
+    id: song.id,
+    title: song.title,
+    status: song.status,
+    error: song.error,
+    lyrics: song.lyrics,
+    styleTags: song.styleTags,
+    variants: song.variants ?? [],
+    parentId: song.parentId,
+  };
+}
