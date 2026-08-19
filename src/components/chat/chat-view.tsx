@@ -120,8 +120,6 @@ export function ChatView() {
   const abortRef = useRef<AbortController | null>(null);
   const lastPromptRef = useRef("");
   const lastActivityRef = useRef(0);
-  const sawToolStartRef = useRef(false);
-  const autoRetriedRef = useRef(false);
   const reuseHandledRef = useRef(false);
   // 收到过增量流的消息 id：完整文本兜底（delta）不应覆盖已流式累积的文本
   const streamedRef = useRef(new Set<string>());
@@ -225,7 +223,6 @@ export function ChatView() {
     const controller = new AbortController();
     abortRef.current = controller;
     lastActivityRef.current = Date.now();
-    sawToolStartRef.current = false;
     const refAudioForSend = refAudio.trim() || undefined;
 
     try {
@@ -251,7 +248,6 @@ export function ChatView() {
               break;
             }
             case "tool_start": {
-              sawToolStartRef.current = true;
               const d = data as { args?: { title?: string } };
               setMessages((prev) =>
                 prev.map((m) =>
@@ -314,12 +310,9 @@ export function ChatView() {
       patchMsg(assistantMsg.id, { done: true });
       if (userAborted) {
         // 用户主动停止：不做错误提示
-      } else if (!sawToolStartRef.current && !autoRetriedRef.current && lastPromptRef.current) {
-        // 断线时尚未触发任何生成任务 → 安全自动重试一次（不产生重复扣费）
-        autoRetriedRef.current = true;
-        setError("连接中断，正在自动重试…");
-        void sendPrompt(lastPromptRef.current);
       } else {
+        // 不自动重试：无法区分「请求未到达」与「已生成但响应丢失」，
+        // 盲目重发可能重复扣费（对抗性检验 C1）。交给用户手动重试并自行判断。
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
@@ -333,7 +326,6 @@ export function ChatView() {
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
-    autoRetriedRef.current = false;
     void sendPrompt(text);
   }
 
@@ -436,8 +428,7 @@ export function ChatView() {
             variant="ghost"
             size="sm"
             onClick={() => {
-              autoRetriedRef.current = false;
-              void sendPrompt(lastPromptRef.current);
+                        void sendPrompt(lastPromptRef.current);
             }}
             disabled={sending || !lastPromptRef.current}
           >

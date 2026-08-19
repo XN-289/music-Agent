@@ -176,6 +176,9 @@ export class MockSunoProvider implements SunoProvider {
     // 跨重启持久化：恢复上次任务状态；进行中的任务已随进程中断 → 标记失败
     this.restoreJobs();
     void this.cleanupOldAudio();
+    // 周期性清理（对抗性检验 D1：init-only 会让长期运行的 dev server 无限堆积 WAV）
+    const timer = setInterval(() => void this.cleanupOldAudio(), 24 * 3600 * 1000);
+    timer.unref?.();
   }
 
   private restoreJobs() {

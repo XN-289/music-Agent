@@ -6,9 +6,17 @@ import { checkRateLimit, clientIp } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // 生产环境禁用：本端点无鉴权且直连付费生成（对抗性检验 C1 修复）
+  if (process.env.NODE_ENV === 'production') {
+    return Response.json({ error: 'Not Found' }, { status: 404 });
+  }
   const rl = checkRateLimit(`dev:${clientIp(req)}`, { limit: 20, windowMs: 60_000 });
   if (!rl.ok) {
     return Response.json({ error: '请求太频繁，请稍后再试' }, { status: 429 });
+  }
+  const grl = checkRateLimit('global:dev', { limit: 30, windowMs: 60_000 });
+  if (!grl.ok) {
+    return Response.json({ error: '服务繁忙，请稍后再试' }, { status: 429 });
   }
   const body = (await req.json().catch(() => null)) as {
     title?: string;

@@ -82,6 +82,7 @@ export function SongDetailClient({
   useEffect(() => {
     if (song.status !== "processing" || !jobId) return;
     let cancelled = false;
+    const controller = new AbortController();
     pollJob(
       jobId,
       (r) => {
@@ -92,10 +93,11 @@ export function SongDetailClient({
           setLive({ progress: r.job.progress, stage: r.job.stage });
         }
       },
-      { intervalMs: 3000 },
+      { intervalMs: 3000, signal: controller.signal },
     ).catch(() => {});
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [song.status, jobId, router]);
 

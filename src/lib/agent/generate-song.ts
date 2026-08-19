@@ -12,6 +12,8 @@ export interface SubmitGenerationInput {
   prompt?: string;
   instrumental?: boolean;
   referenceAudioUrl?: string;
+  model?: string;
+  duration?: number;
 }
 
 export async function submitGeneration(input: SubmitGenerationInput) {
@@ -24,6 +26,8 @@ export async function submitGeneration(input: SubmitGenerationInput) {
     prompt: input.prompt,
     instrumental: input.instrumental ?? false,
     referenceAudioUrl: input.referenceAudioUrl,
+    model: input.model,
+    duration: input.duration,
   });
 
   const now = new Date();

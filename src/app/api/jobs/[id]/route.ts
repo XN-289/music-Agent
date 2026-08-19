@@ -1,14 +1,20 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { getProvider } from '@/lib/providers';
 import { makeLrc, parseLyricLines, type LyricsLine } from '@/lib/audio/lrc';
+import { checkRateLimit, clientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 // 轮询端点：前端 GenerationCard / 歌曲详情页轮询 job 进度；
 // 任务完成或失败时把结果落库（幂等），返回 { job, song }。
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // 轮询也会打上游 record-info：限流防滥用（对抗性检验 M6）
+  const rl = checkRateLimit(`jobs:${clientIp(req)}`, { limit: 120, windowMs: 60_000 });
+  if (!rl.ok) {
+    return Response.json({ error: '请求太频繁' }, { status: 429 });
+  }
   const provider = getProvider();
   const job = await provider.getJob(id);
 
@@ -62,7 +68,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
               error: null,
               updatedAt: now,
             })
-            .where(eq(schema.songs.id, jobRow.songId));
+            .where(
+              and(eq(schema.songs.id, jobRow.songId), eq(schema.songs.status, 'processing')),
+            );
         }
       }
     } else if (job.status === 'failed') {

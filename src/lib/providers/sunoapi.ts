@@ -111,8 +111,22 @@ function validateReplaceSection(input: ReplaceSectionInput) {
   assert(input.infillStartS != null && input.infillEndS != null, 'infill 区间必填');
   assert(input.infillStartS >= 0 && input.infillEndS > input.infillStartS, 'infill 区间非法（起始须 ≥0 且小于结束）');
   assert(input.infillEndS - input.infillStartS >= 10, '替换段落至少 10 秒');
-  assert(!!input.fullLyrics?.trim(), 'fullLyrics 必填');
+  assert(input.fullLyrics != null && input.fullLyrics.trim().length > 0, 'fullLyrics 必填');
+  assert(input.fullLyrics.length <= 5000, 'fullLyrics 过长（≤5000 字符）');
   assert(!!input.taskId, 'taskId 必填');
+  assert(!input.prompt || input.prompt.length <= 3000, 'prompt 过长（≤3000 字符）');
+  assert(!input.title || input.title.length <= 100, '标题过长（≤100 字符）');
+  const tags = input.styleTags?.join(', ') ?? '';
+  assert(tags.length <= 1000, '风格标签过长（≤1000 字符）');
+}
+
+/** extend/cover 的公共长度校验（付费路径，缺省免费失败） */
+function validateIterationText(input: IterationInput) {
+  assert(!input.prompt || input.prompt.length <= 3000, 'prompt 过长（≤3000 字符）');
+  assert(!input.title || input.title.length <= 100, '标题过长（≤100 字符）');
+  assert(!input.lyrics || input.lyrics.length <= 5000, '歌词过长（≤5000 字符）');
+  const tags = input.styleTags?.join(', ') ?? '';
+  assert(tags.length <= 1000, '风格标签过长（≤1000 字符）');
 }
 
 /** 提交成功后异步记录剩余 credits（仅日志，用于成本可见性） */
@@ -168,12 +182,20 @@ export class SunoApiProvider implements SunoProvider {
     }
 
     const customMode = !!input.lyrics;
+    const model = input.model ?? DEFAULT_MODEL;
     const body: Record<string, unknown> = {
       customMode,
       instrumental: input.instrumental ?? false,
-      model: input.model ?? DEFAULT_MODEL,
+      model,
       callBackUrl: callbackUrl(),
     };
+    if (input.duration != null) {
+      // 指定时长仅 V5_5 支持（规范：10-360 秒且仅 customMode）
+      assert(model === 'V5_5', `duration 参数仅 V5_5 模型支持（当前: ${model}）`);
+      assert(customMode, 'duration 参数仅自定义模式支持');
+      assert(input.duration >= 10 && input.duration <= 360, `duration 超出范围（10-360 秒，当前: ${input.duration}）`);
+      body.duration = Math.round(input.duration);
+    }
     if (customMode) {
       // custom 模式：prompt 即歌词（逐字演唱），style/title 必填
       body.prompt = input.lyrics;
@@ -196,6 +218,7 @@ export class SunoApiProvider implements SunoProvider {
     if (input.direction === 'start') {
       throw new UnsupportedFeatureError(this.id, 'extend:start（前置延长，需换用 upload-cover 变通）');
     }
+    validateIterationText(input);
     const hasCustom = !!(input.prompt || input.title);
     const body: Record<string, unknown> = {
       audioId: input.audioId,
@@ -223,6 +246,7 @@ export class SunoApiProvider implements SunoProvider {
     if (!input.sourceAudioUrl) {
       throw new Error('cover 需要源音频 URL（sourceAudioUrl）');
     }
+    validateIterationText(input);
     assert(
       /^https?:\/\//.test(input.sourceAudioUrl),
       `源音频 URL 必须可公网访问（当前：${input.sourceAudioUrl.slice(0, 40)}）`,

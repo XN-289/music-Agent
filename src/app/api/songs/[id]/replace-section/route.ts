@@ -33,6 +33,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ) {
       throw new Error('请填写有效的替换区间（起始秒 < 结束秒）');
     }
+    // 区间上限钳制到歌曲时长，避免提交必然失败的任务烧 credits
+    const dur = variant.durationSec || 0;
+    if (dur > 0 && body.infillEndS > dur) {
+      throw new Error(`替换区间超出歌曲时长（歌曲共 ${dur} 秒）`);
+    }
+    if (!body.prompt || body.prompt.length > 3000) {
+      throw new Error('prompt 必填且 ≤3000 字符');
+    }
     const provider = getProvider();
     const { jobId } = await provider.replaceSection({
       audioId: variant.audioId!,

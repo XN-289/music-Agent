@@ -46,6 +46,8 @@ export interface GenerateMusicInput {
   model?: string;
   /** 参考音频 URL（音频到音频风格迁移；sunoapi 走 upload-cover 通道） */
   referenceAudioUrl?: string;
+  /** 指定时长（秒，10-360；仅 V5_5 模型支持） */
+  duration?: number;
 }
 
 export interface GenerateResult {

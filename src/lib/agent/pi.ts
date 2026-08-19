@@ -53,8 +53,15 @@ const generateMusicToolDef = defineTool({
     referenceAudioUrl: Type.Optional(
       Type.String({ description: '参考音频 URL（用户提供时传此参数，按其风格创作）' }),
     ),
+    model: Type.Optional(
+      Type.String({ description: '模型版本（默认 V4_5ALL；指定时长必须用 V5_5）' }),
+    ),
+    duration: Type.Optional(
+      Type.Number({ description: '指定歌曲时长（秒，10-360，仅 V5_5 模型支持）' }),
+    ),
   }),
   execute: async (_toolCallId, params) => {
+    spendPaidCallBudget(); // 付费调用预算：防注入批量烧钱
     const { jobId, songId } = await submitGeneration({
       title: params.title,
       lyrics: params.lyrics,
@@ -62,6 +69,8 @@ const generateMusicToolDef = defineTool({
       prompt: params.prompt,
       instrumental: params.instrumental ?? false,
       referenceAudioUrl: params.referenceAudioUrl,
+      model: params.model,
+      duration: params.duration,
     });
     return {
       content: [{ type: 'text', text: '生成任务已提交' }],
@@ -83,6 +92,7 @@ const extendMusicToolDef = defineTool({
     contextSeconds: Type.Optional(Type.Number({ description: '参考原始结尾多少秒' })),
   }),
   execute: async (_toolCallId, params) => {
+    spendPaidCallBudget(); // 付费调用预算：防注入批量烧钱
     const { song, variant } = await resolveSongForIteration(params.songId);
     const provider = getProvider();
     // continueAt 是续写起点：默认参考结尾 30 秒上下文
@@ -122,6 +132,7 @@ const coverMusicToolDef = defineTool({
     title: Type.Optional(Type.String({ description: '翻唱版标题' })),
   }),
   execute: async (_toolCallId, params) => {
+    spendPaidCallBudget(); // 付费调用预算：防注入批量烧钱
     const { song, variant } = await resolveSongForIteration(params.songId);
     const provider = getProvider();
     const { jobId } = await provider.cover({
@@ -157,6 +168,7 @@ const replaceSectionToolDef = defineTool({
     infillEndS: Type.Optional(Type.Number({ description: '替换区间终点（秒）' })),
   }),
   execute: async (_toolCallId, params) => {
+    spendPaidCallBudget(); // 付费调用预算：防注入批量烧钱
     const { song, variant, taskId, providerId, activeProviderId } =
       await resolveSongForIteration(params.songId);
     if (!taskId) throw new Error('缺少原始生成任务信息，无法替换段落');
@@ -344,9 +356,10 @@ function createSession(): Promise<AgentSession> {
 export function getPiSession(): Promise<AgentSession> {
   if (!sessionPromise) {
     sessionPromise = createSession();
-    // 创建失败后重置缓存，下次请求重试（而不是永远返回同一个 rejected promise）
+    // 创建失败后重置缓存（连同事件订阅标记），下次请求重试
     sessionPromise.catch(() => {
       sessionPromise = null;
+      subscribed = false;
     });
   }
   return sessionPromise;
@@ -358,11 +371,36 @@ export function getPiSession(): Promise<AgentSession> {
 // 同一时刻只有一个 prompt 在跑，事件与当前请求一一对应。
 
 let promptChain: Promise<unknown> = Promise.resolve();
+let promptRunning = false;
+let turnPaidCalls = 0;
+
+export const MAX_PAID_CALLS_PER_TURN = 3;
+
+/** 当前是否有一个 turn 正在运行（并发请求直接 409，防止事件串流与重复扣费） */
+export function isPromptRunning(): boolean {
+  return promptRunning;
+}
+
+/** 付费工具调用预算：一次用户 turn 最多 N 次真实生成（防提示词注入批量烧钱） */
+export function spendPaidCallBudget(): void {
+  turnPaidCalls += 1;
+  if (turnPaidCalls > MAX_PAID_CALLS_PER_TURN) {
+    throw new Error(
+      `本轮已触发 ${MAX_PAID_CALLS_PER_TURN} 次生成/迭代，超过上限。如需更多请让用户在新一轮明确确认。`,
+    );
+  }
+}
 
 export async function queuePrompt(text: string): Promise<void> {
   const run = promptChain.then(async () => {
-    const session = await getPiSession();
-    await session.prompt(text, { streamingBehavior: 'followUp' });
+    promptRunning = true;
+    turnPaidCalls = 0;
+    try {
+      const session = await getPiSession();
+      await session.prompt(text, { streamingBehavior: 'followUp' });
+    } finally {
+      promptRunning = false;
+    }
   });
   // 无论成败都让链条继续，但把错误抛给调用方
   promptChain = run.catch(() => {});
