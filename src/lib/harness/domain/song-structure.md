@@ -1,4 +1,4 @@
-# 歌曲结构规范
+# 歌曲结构规范与模板库
 
 ## 结构标记
 
@@ -24,3 +24,22 @@
 - 用具体意象而不是抽象形容词（"街灯拉长我们的影子"好过"我们很幸福"）
 - 禁止占位符（"la la la"、重复填充行）
 - 数字写全拼（"twenty" 而非 "20"）；缩写展开
+
+## 结构模板库（按风格/场景选模板）
+
+| 模板 | 结构 | 适用 |
+|---|---|---|
+| 标准流行 | Verse 1 → Pre-Chorus → Chorus → Verse 2 → Chorus → Bridge → Chorus | 默认选择；3-4 分钟主流歌曲 |
+| Hook 前置 | Chorus（hook 直接开场）→ Verse 1 → Chorus → Verse 2 → Chorus | 短视频/抖音神曲；Hook 前 3 秒进 |
+| 叙事民谣 | Verse 1 → Verse 2 → Chorus → Verse 3 → Chorus → Outro | 讲故事型歌词；主歌是主角 |
+| 说唱 | Intro（beat）→ Verse 1 → Hook → Verse 2 → Hook → Bridge → Hook×2 | hip hop / trap；hook 8 小节、verse 16 小节 |
+| 电子舞曲 | Intro → Build-up → Drop → Break → Build-up → Drop → Outro | EDM/house；drop 段无词或口号短句 |
+| 纯音乐 | 无歌词，风格+质感标签驱动 | instrumental 场景（配乐/学习/氛围） |
+| 国风 | 起承转合（见国风知识） | 古风/仙侠场景 |
+
+**模板选择规则**：
+- 用户明确时长（15/30/60 秒）→ 用场景库的短视频结构，不用标准模板
+- 风格自带结构（说唱/电子/国风）→ 按风格模板，不硬套流行模板
+- 用户没要求 → 标准流行模板
+
+**说唱模板细节**：hook 8 小节、verse 16 小节；按 flow 断行（一口气一行）；韵脚落在每行末尾重音节；hook 逐字重复。
