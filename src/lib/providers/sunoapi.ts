@@ -85,6 +85,43 @@ function callbackUrl(): string {
   return process.env.SUNO_CALLBACK_URL ?? 'https://example.com/sunoapi-callback';
 }
 
+// ---------- 扣费前校验 ----------
+// 每次真实生成都消耗 credits：所有必填字段与长度约束在 POST 之前本地校验，
+// 让格式错误免费失败（Fail Fast, Fail Free），而不是花 credits 换回一个 400/失败任务。
+
+function assert(cond: boolean, message: string): asserts cond {
+  if (!cond) throw new Error(`[sunoapi 校验失败] ${message}`);
+}
+
+function validateGenerate(input: GenerateMusicInput) {
+  const customMode = !!input.lyrics;
+  if (customMode) {
+    assert(input.lyrics.length <= 5000, `歌词过长（${input.lyrics.length}/5000 字符）`);
+    assert(input.title.length <= 100, '标题过长（≤100 字符）');
+    const style = input.styleTags.join(', ');
+    assert(style.length > 0, '风格标签不能为空');
+    assert(style.length <= 1000, '风格标签过长（≤1000 字符）');
+  } else {
+    assert(!!input.prompt?.trim(), '非歌词模式必须提供 prompt 风格描述');
+    assert(input.prompt!.length <= 3000, 'prompt 过长（≤3000 字符）');
+  }
+}
+
+function validateReplaceSection(input: ReplaceSectionInput) {
+  assert(input.infillStartS != null && input.infillEndS != null, 'infill 区间必填');
+  assert(input.infillStartS >= 0 && input.infillEndS > input.infillStartS, 'infill 区间非法（起始须 ≥0 且小于结束）');
+  assert(input.infillEndS - input.infillStartS >= 10, '替换段落至少 10 秒');
+  assert(!!input.fullLyrics?.trim(), 'fullLyrics 必填');
+  assert(!!input.taskId, 'taskId 必填');
+}
+
+/** 提交成功后异步记录剩余 credits（仅日志，用于成本可见性） */
+function logCredits() {
+  void api<number>('/api/v1/generate/credit')
+    .then((c) => console.log(`[sunoapi] 任务已提交，剩余 credits: ${c}`))
+    .catch(() => {});
+}
+
 export class SunoApiProvider implements SunoProvider {
   readonly id = 'sunoapi';
   readonly displayName = 'sunoapi.org（Suno V4/V4.5/V5 第三方 API）';
@@ -103,6 +140,7 @@ export class SunoApiProvider implements SunoProvider {
   ]);
 
   async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
+    validateGenerate(input);
     // 参考音频 → upload-cover 通道：上传参考曲目后按描述重演（音频到音频风格迁移）
     if (input.referenceAudioUrl) {
       const upload = await api<{ fileUrl?: string; downloadUrl?: string }>('/api/file-url-upload', {
@@ -125,6 +163,7 @@ export class SunoApiProvider implements SunoProvider {
           callBackUrl: callbackUrl(),
         },
       });
+      logCredits();
       return { jobId: data.taskId };
     }
 
@@ -148,6 +187,7 @@ export class SunoApiProvider implements SunoProvider {
       body.prompt = input.prompt;
     }
     const data = await api<{ taskId: string }>('/api/v1/generate', { body });
+    logCredits();
     return { jobId: data.taskId };
   }
 
@@ -175,6 +215,7 @@ export class SunoApiProvider implements SunoProvider {
       body.continueAt = input.continueAt;
     }
     const data = await api<{ taskId: string }>('/api/v1/generate/extend', { body });
+    logCredits();
     return { jobId: data.taskId };
   }
 
@@ -182,6 +223,10 @@ export class SunoApiProvider implements SunoProvider {
     if (!input.sourceAudioUrl) {
       throw new Error('cover 需要源音频 URL（sourceAudioUrl）');
     }
+    assert(
+      /^https?:\/\//.test(input.sourceAudioUrl),
+      `源音频 URL 必须可公网访问（当前：${input.sourceAudioUrl.slice(0, 40)}）`,
+    );
     // 第一步：源音频 URL → 平台文件（上传服务是独立域名；fileUrl/downloadUrl 双字段兼容）
     const upload = await api<{ fileUrl?: string; downloadUrl?: string }>('/api/file-url-upload', {
       rawUrl: `${UPLOAD_BASE}/api/file-url-upload`,
@@ -214,13 +259,12 @@ export class SunoApiProvider implements SunoProvider {
       body.prompt = input.prompt ?? 'Restyle this song in a fresh arrangement';
     }
     const data = await api<{ taskId: string }>('/api/v1/generate/upload-cover', { body });
+    logCredits();
     return { jobId: data.taskId };
   }
 
   async replaceSection(input: ReplaceSectionInput): Promise<GenerateResult> {
-    if (!input.taskId || input.infillStartS == null || input.infillEndS == null || !input.fullLyrics) {
-      throw new Error('replace-section 需要 taskId / infillStartS / infillEndS / fullLyrics');
-    }
+    validateReplaceSection(input);
     const data = await api<{ taskId: string }>('/api/v1/generate/replace-section', {
       body: {
         taskId: input.taskId,
@@ -234,6 +278,7 @@ export class SunoApiProvider implements SunoProvider {
         callBackUrl: callbackUrl(),
       },
     });
+    logCredits();
     return { jobId: data.taskId };
   }
 
