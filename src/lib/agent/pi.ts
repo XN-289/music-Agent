@@ -329,6 +329,20 @@ function createSession(): Promise<AgentSession> {
       );
     }
 
+    // 注意：SDK 对外部传入的 loader 实例不会自动 reload()，而 systemPrompt 在 reload 里才解析——
+    // 不调用会把音乐 harness 提示词整个丢掉，模型回退到 pi 默认编码助手提示词（真实生成验证抓出）。
+    const resourceLoader = new DefaultResourceLoader({
+      cwd,
+      agentDir,
+      systemPrompt: SYSTEM_PROMPT,
+      noContextFiles: true,
+      noSkills: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      noExtensions: true,
+    });
+    await resourceLoader.reload({});
+
     const { session } = await createAgentSession({
       cwd,
       modelRuntime,
@@ -336,16 +350,7 @@ function createSession(): Promise<AgentSession> {
       thinkingLevel: resolved.thinkingLevel,
       noTools: 'builtin', // 禁用 read/bash/edit/write 编码工具，仅保留自定义工具
       customTools: CUSTOM_TOOLS,
-      resourceLoader: new DefaultResourceLoader({
-        cwd,
-        agentDir,
-        systemPrompt: SYSTEM_PROMPT,
-        noContextFiles: true,
-        noSkills: true,
-        noPromptTemplates: true,
-        noThemes: true,
-        noExtensions: true,
-      }),
+      resourceLoader,
       sessionManager: SessionManager.create(cwd),
     });
 
