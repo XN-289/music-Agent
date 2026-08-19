@@ -44,6 +44,8 @@ export interface GenerateMusicInput {
   prompt?: string;
   instrumental?: boolean;
   model?: string;
+  /** 参考音频 URL（音频到音频风格迁移；sunoapi 走 upload-cover 通道） */
+  referenceAudioUrl?: string;
 }
 
 export interface GenerateResult {
@@ -108,6 +110,8 @@ export interface SunoProvider {
   replaceSection(input: ReplaceSectionInput): Promise<GenerateResult>;
   /** 剩余额度（可选实现；mock 不限额度则缺省） */
   getCredits?(): Promise<{ credits: number }>;
+  /** 词级时间戳歌词（可选实现；返回空数组时由调用层回退均分行） */
+  getTimestampedLyrics?(taskId: string, audioId: string): Promise<LyricsLine[]>;
   // P1.5+ 扩展点（对齐调研结论的接口设计）：
   // generateLyrics / mashup / concat / stemSplit
   // listPersonas / createPersona / deletePersona / download

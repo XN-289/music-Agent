@@ -50,6 +50,9 @@ const generateMusicToolDef = defineTool({
     }),
     prompt: Type.Optional(Type.String({ description: '一句话风格描述' })),
     instrumental: Type.Optional(Type.Boolean({ default: false, description: '是否纯音乐' })),
+    referenceAudioUrl: Type.Optional(
+      Type.String({ description: '参考音频 URL（用户提供时传此参数，按其风格创作）' }),
+    ),
   }),
   execute: async (_toolCallId, params) => {
     const { jobId, songId } = await submitGeneration({
@@ -58,6 +61,7 @@ const generateMusicToolDef = defineTool({
       styleTags: params.styleTags,
       prompt: params.prompt,
       instrumental: params.instrumental ?? false,
+      referenceAudioUrl: params.referenceAudioUrl,
     });
     return {
       content: [{ type: 'text', text: '生成任务已提交' }],

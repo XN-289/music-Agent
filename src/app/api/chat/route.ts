@@ -33,12 +33,20 @@ export async function POST(req: Request) {
     return Response.json({ error: '请求太频繁，请稍后再试（限流 12 次/分钟）' }, { status: 429 });
   }
 
-  const body = (await req.json().catch(() => null)) as { text?: string; chatId?: string };
+  const body = (await req.json().catch(() => null)) as {
+    text?: string;
+    chatId?: string;
+    referenceAudioUrl?: string;
+  };
   if (!body?.text?.trim()) {
     return Response.json({ error: 'empty prompt' }, { status: 400 });
   }
   const chatId = body.chatId ?? 'default';
   const userText = body.text.trim();
+  // 参考音频：注入给 LLM 的指令（本次要创作新歌时把 URL 传给 generate_music 的 referenceAudioUrl）
+  const promptForLlm = body.referenceAudioUrl
+    ? `[系统注入] 用户本次提供了参考音频 URL：${body.referenceAudioUrl}。如果用户这次是想创作新歌，请在调用 generate_music 时把该 URL 作为 referenceAudioUrl 参数传入（按其风格/听感创作）。\n\n${userText}`
+    : userText;
   const now = new Date();
 
   // 会话与用户消息落库（会话行 upsert）
@@ -54,7 +62,10 @@ export async function POST(req: Request) {
     id: crypto.randomUUID(),
     chatId,
     role: 'user',
-    content: JSON.stringify({ text: userText }),
+    content: JSON.stringify({
+      text: userText,
+      ...(body.referenceAudioUrl ? { referenceAudioUrl: body.referenceAudioUrl } : {}),
+    }),
     createdAt: now,
   });
 
@@ -160,7 +171,7 @@ export async function POST(req: Request) {
       });
 
       try {
-        await queuePrompt(userText);
+        await queuePrompt(promptForLlm);
         // 助手消息持久化（文本 + 工具卡片）
         await db.insert(schema.messages).values({
           id: crypto.randomUUID(),

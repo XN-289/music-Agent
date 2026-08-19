@@ -35,11 +35,12 @@ async function streamChat(
   onEvent: (event: string, data: unknown) => void,
   signal: AbortSignal,
   onActivity: () => void,
+  referenceAudioUrl?: string,
 ): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, chatId }),
+    body: JSON.stringify({ text, chatId, referenceAudioUrl }),
     signal,
   });
   if (!res.ok) {
@@ -107,6 +108,8 @@ export function ChatView() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refAudio, setRefAudio] = useState("");
+  const [showRef, setShowRef] = useState(false);
   const [credits, setCredits] = useState<{
     unlimited?: boolean;
     todayCount?: number;
@@ -223,6 +226,7 @@ export function ChatView() {
     abortRef.current = controller;
     lastActivityRef.current = Date.now();
     sawToolStartRef.current = false;
+    const refAudioForSend = refAudio.trim() || undefined;
 
     try {
       await streamChat(
@@ -302,6 +306,7 @@ export function ChatView() {
         () => {
           lastActivityRef.current = Date.now();
         },
+        refAudioForSend,
       );
       patchMsg(assistantMsg.id, { done: true });
     } catch (e) {
@@ -466,6 +471,24 @@ export function ChatView() {
               <Button type="submit" size="sm" disabled={!input.trim()}>
                 生成
               </Button>
+            )}
+          </div>
+          <div className="border-t border-border/60 px-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowRef((v) => !v)}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              🎵 参考音频 {showRef ? "▲" : "▼"}
+            </button>
+            {showRef && (
+              <input
+                type="url"
+                value={refAudio}
+                onChange={(e) => setRefAudio(e.target.value)}
+                placeholder="粘贴参考音频 URL（按它的风格/听感创作，可选）"
+                className="mt-1.5 h-8 w-full rounded-md border border-input bg-transparent px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              />
             )}
           </div>
         </div>

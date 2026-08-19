@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/lib/db';
 import { getProvider } from '@/lib/providers';
-import { makeLrc, parseLyricLines } from '@/lib/audio/lrc';
+import { makeLrc, parseLyricLines, type LyricsLine } from '@/lib/audio/lrc';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +36,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         )[0];
         if (songRow && songRow.status !== 'done') {
           const durationSec = job.result[0].durationSec;
-          const lrc = durationSec > 0 ? makeLrc(parseLyricLines(songRow.lyrics ?? ''), durationSec) : [];
+          // 词级对齐优先（真实后端），失败/不支持时回退均分行
+          let lrc: LyricsLine[] = [];
+          try {
+            const aligned = await provider.getTimestampedLyrics?.(
+              jobRow.id,
+              job.result[0].audioId ?? '',
+            );
+            if (aligned && aligned.length > 0) lrc = aligned;
+          } catch {
+            // 回退
+          }
+          if (lrc.length === 0 && durationSec > 0) {
+            lrc = makeLrc(parseLyricLines(songRow.lyrics ?? ''), durationSec);
+          }
           // 守卫更新：仅当仍是 processing 时落库（并发轮询下只完成一次）
           await db
             .update(schema.songs)

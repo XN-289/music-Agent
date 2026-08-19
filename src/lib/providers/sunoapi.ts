@@ -7,7 +7,19 @@
 //  - cover 需要上传型输入（uploadUrl）：适配器内部用源音频 URL 走 file-url-upload 中转
 //  - replace-section 需要原始 taskId + fullLyrics + infill 区间，由调用层从 DB 补全
 
-import { UnsupportedFeatureError, type ExtendInput, type GenerateMusicInput, type GenerateResult, type IterationInput, type JobInfo, type ProviderCapability, type ReplaceSectionInput, type SongVariant, type SunoProvider } from './types';
+import {
+  UnsupportedFeatureError,
+  type ExtendInput,
+  type GenerateMusicInput,
+  type GenerateResult,
+  type IterationInput,
+  type JobInfo,
+  type LyricsLine,
+  type ProviderCapability,
+  type ReplaceSectionInput,
+  type SongVariant,
+  type SunoProvider,
+} from './types';
 
 const DEFAULT_MODEL = 'V4_5ALL';
 const UPLOAD_BASE = 'https://sunoapiorg.redpandaai.co';
@@ -84,6 +96,30 @@ export class SunoApiProvider implements SunoProvider {
   ]);
 
   async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
+    // 参考音频 → upload-cover 通道：上传参考曲目后按描述重演（音频到音频风格迁移）
+    if (input.referenceAudioUrl) {
+      const upload = await api<{ fileUrl?: string; downloadUrl?: string }>('/api/file-url-upload', {
+        rawUrl: `${UPLOAD_BASE}/api/file-url-upload`,
+        body: {
+          fileUrl: input.referenceAudioUrl,
+          uploadPath: 'references',
+          fileName: `${input.title ?? 'reference'}.mp3`,
+        },
+      });
+      const uploadUrl = upload.fileUrl ?? upload.downloadUrl;
+      if (!uploadUrl) throw new Error('上传服务未返回文件 URL');
+      const data = await api<{ taskId: string }>('/api/v1/generate/upload-cover', {
+        body: {
+          uploadUrl,
+          customMode: false,
+          instrumental: input.instrumental ?? false,
+          prompt: input.prompt ?? input.styleTags.join(', '),
+          model: input.model ?? DEFAULT_MODEL,
+        },
+      });
+      return { jobId: data.taskId };
+    }
+
     const customMode = !!input.lyrics;
     const body: Record<string, unknown> = {
       customMode,
@@ -192,6 +228,17 @@ export class SunoApiProvider implements SunoProvider {
     return { credits };
   }
 
+  async getTimestampedLyrics(taskId: string, audioId: string): Promise<LyricsLine[]> {
+    try {
+      const data = await api<unknown>('/api/v1/generate/get-timestamped-lyrics', {
+        body: { taskId, audioId },
+      });
+      return parseAlignedLyrics(data);
+    } catch {
+      return []; // 解析失败时由调用层回退均分行
+    }
+  }
+
   async getJob(jobId: string): Promise<JobInfo<SongVariant[]>> {
     try {
       const d = await api<{
@@ -254,3 +301,54 @@ type TrackInfo = {
   title?: string;
   duration?: number;
 };
+
+// 词级对齐的容错解析：响应形状未在 OpenAPI 中完全固定，递归扫描数组条目，
+// 兼容 text/lyric/word/content 与 start/end（秒或毫秒启发式判断）。
+function parseAlignedLyrics(raw: unknown): LyricsLine[] {
+  const out: LyricsLine[] = [];
+  const seen = new Set<LyricsLine>();
+
+  const toMs = (v: unknown): number | null => {
+    const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
+    if (!Number.isFinite(n) || n < 0) return null;
+    // 启发式：> 1000 视为毫秒，否则视为秒（歌曲时长最多约 480s）
+    return n > 1000 ? n : Math.round(n * 1000);
+  };
+
+  const extract = (item: unknown) => {
+    if (!item || typeof item !== 'object') return;
+    const o = item as Record<string, unknown>;
+    const text = (o.text ?? o.lyric ?? o.word ?? o.content ?? o.words) as string | undefined;
+    if (typeof text !== 'string' || !text.trim()) return;
+    const startMs = toMs(o.start ?? o.startS ?? o.startMs ?? o.startTime ?? o.t);
+    const endMs = toMs(o.end ?? o.endS ?? o.endMs ?? o.endTime);
+    const line: LyricsLine = {
+      startMs: startMs ?? 0,
+      endMs: endMs ?? (startMs ?? 0) + 1000,
+      text: text.trim(),
+    };
+    if (!seen.has(line)) {
+      seen.add(line);
+      out.push(line);
+    }
+  };
+
+  const visit = (v: unknown) => {
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item && typeof item === 'object') extract(item);
+        else visit(item);
+      }
+      return;
+    }
+    if (v && typeof v === 'object') {
+      for (const child of Object.values(v as object)) {
+        if (Array.isArray(child) || (child && typeof child === 'object')) visit(child);
+      }
+    }
+  };
+
+  visit(raw);
+  // 按开始时间排序，合并重叠（词级条目常多行同句）
+  return out.sort((a, b) => a.startMs - b.startMs);
+}

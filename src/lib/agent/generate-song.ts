@@ -11,6 +11,7 @@ export interface SubmitGenerationInput {
   styleTags: string[];
   prompt?: string;
   instrumental?: boolean;
+  referenceAudioUrl?: string;
 }
 
 export async function submitGeneration(input: SubmitGenerationInput) {
@@ -22,6 +23,7 @@ export async function submitGeneration(input: SubmitGenerationInput) {
     styleTags: input.styleTags,
     prompt: input.prompt,
     instrumental: input.instrumental ?? false,
+    referenceAudioUrl: input.referenceAudioUrl,
   });
 
   const now = new Date();

@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/dialog";
-import { ArrowLeft, Copy, GitBranch, Layers, Loader2, Pause, Play, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
 
 export interface SongDetailData {
   id: string;
@@ -55,10 +55,14 @@ export function SongDetailClient({
   // 迭代对话框状态
   const [extendOpen, setExtendOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
-  const [busy, setBusy] = useState<"extend" | "cover" | null>(null);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [busy, setBusy] = useState<"extend" | "cover" | "replace" | null>(null);
   const [extPrompt, setExtPrompt] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
   const [coverTitle, setCoverTitle] = useState("");
+  const [replacePrompt, setReplacePrompt] = useState("");
+  const [replaceStart, setReplaceStart] = useState("");
+  const [replaceEnd, setReplaceEnd] = useState("");
   const [iterError, setIterError] = useState<string | null>(null);
 
   // 实时进度（M3）：轮询过程中用本地状态刷新进度条，服务端 props 只在终态时刷新
@@ -95,13 +99,17 @@ export function SongDetailClient({
     };
   }, [song.status, jobId, router]);
 
-  async function runIteration(kind: "extend" | "cover", body: Record<string, unknown>) {
+  async function runIteration(
+    kind: "extend" | "cover" | "replace",
+    body: Record<string, unknown>,
+  ) {
     setBusy(kind);
     setIterError(null);
     const controller = new AbortController();
     iterAbortRef.current = controller;
     try {
-      const res = await fetch(`/api/songs/${song.id}/${kind}`, {
+      const endpoint = kind === "replace" ? "replace-section" : kind;
+      const res = await fetch(`/api/songs/${song.id}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -118,9 +126,11 @@ export function SongDetailClient({
       router.refresh();
       setExtendOpen(false);
       setCoverOpen(false);
+      setReplaceOpen(false);
       setExtPrompt("");
       setCoverPrompt("");
       setCoverTitle("");
+      setReplacePrompt("");
     } catch (e) {
       if (!controller.signal.aborted) {
         // 失败时保留对话框内容，让用户可以直接重试
@@ -144,6 +154,16 @@ export function SongDetailClient({
     void runIteration("cover", {
       prompt: coverPrompt.trim() || undefined,
       title: coverTitle.trim() || undefined,
+    });
+  }
+
+  function onSubmitReplace(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    void runIteration("replace", {
+      prompt: replacePrompt.trim() || undefined,
+      infillStartS: Number(replaceStart),
+      infillEndS: Number(replaceEnd),
     });
   }
 
@@ -278,6 +298,20 @@ export function SongDetailClient({
             <Button
               variant="outline"
               size="sm"
+              disabled={song.status !== "done" || busy !== null}
+              onClick={() => setReplaceOpen(true)}
+              title="替换歌曲中的某一段"
+            >
+              {busy === "replace" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Scissors className="h-3.5 w-3.5" />
+              )}
+              替换段落
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               disabled={song.status !== "done"}
               title="复用这首歌的提示词与风格，创作新歌"
               onClick={() => router.push(`/?reuse=${song.id}`)}
@@ -399,6 +433,45 @@ export function SongDetailClient({
             </Button>
             <Button type="submit" size="sm" disabled={busy !== null}>
               {busy === "cover" ? "生成中…" : "开始翻唱"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 替换段落对话框 */}
+      <Modal open={replaceOpen} onClose={() => setReplaceOpen(false)} title="替换段落">
+        <form onSubmit={onSubmitReplace} className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            指定要替换的时间区间（秒），描述新的内容走向。可以在波形上播放定位时间点。
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              value={replaceStart}
+              onChange={(e) => setReplaceStart(e.target.value)}
+              placeholder="起始秒，如 10"
+              min={0}
+            />
+            <Input
+              type="number"
+              value={replaceEnd}
+              onChange={(e) => setReplaceEnd(e.target.value)}
+              placeholder="结束秒，如 20"
+              min={1}
+            />
+          </div>
+          <Textarea
+            value={replacePrompt}
+            onChange={(e) => setReplacePrompt(e.target.value)}
+            placeholder="例如：把这段改成更安静的钢琴段落"
+            rows={2}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setReplaceOpen(false)}>
+              取消
+            </Button>
+            <Button type="submit" size="sm" disabled={busy !== null}>
+              {busy === "replace" ? "生成中…" : "替换段落"}
             </Button>
           </div>
         </form>
