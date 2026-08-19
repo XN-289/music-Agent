@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Agent · 流程确认与差距审计</title>
+<style>
+  :root {
+    --bg: #0d0d10; --card: #16161c; --card2: #1c1c24; --border: #2a2a35;
+    --text: #e8e8ee; --muted: #9a9aa8; --dim: #6b6b7a;
+    --violet: #a78bfa; --blue: #60a5fa; --teal: #2dd4bf; --amber: #fbbf24;
+    --zinc: #a1a1aa; --green: #4ade80; --red: #f87171; --yellow: #facc15;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; line-height: 1.6; padding-bottom: 80px; }
+  header { padding: 48px 32px 24px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #14121f 0%, var(--bg) 100%); }
+  header h1 { font-size: 28px; font-weight: 700; }
+  header .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  nav { display: flex; gap: 12px; padding: 16px 32px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(13,13,16,.92); backdrop-filter: blur(8px); z-index: 10; }
+  nav a { color: var(--blue); text-decoration: none; font-size: 14px; }
+  main { max-width: 1060px; margin: 0 auto; padding: 32px 24px; }
+  h2 { font-size: 22px; margin: 48px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h2 .no { color: var(--violet); margin-right: 8px; }
+  h3 { font-size: 16px; margin: 28px 0 12px; color: #d6d3e8; }
+  p.desc { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .verdict { border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; background: var(--card); margin: 24px 0; }
+  .verdict .score { font-size: 32px; font-weight: 800; }
+  .verdict .ok { color: var(--green); } .verdict .warn { color: var(--yellow); } .verdict .bad { color: var(--red); }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: rgba(74,222,128,.15); color: var(--green); }
+  .pill.part { background: rgba(250,204,21,.15); color: var(--yellow); }
+  .pill.miss { background: rgba(248,113,113,.15); color: var(--red); }
+
+  /* 流程图 */
+  .flow { margin: 20px 0 8px; }
+  .vrow { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: center; }
+  .role { font-size: 12px; color: var(--dim); text-align: right; }
+  .node { border: 1px solid; border-radius: 10px; padding: 10px 14px; background: var(--card2); font-size: 13.5px; position: relative; }
+  .node b { display: block; font-size: 13.5px; }
+  .node .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .n-user { border-color: #7c5cd6; background: rgba(139,92,246,.08); }
+  .n-user b { color: var(--violet); }
+  .n-agent { border-color: #3b6fd6; background: rgba(59,130,246,.08); }
+  .n-agent b { color: var(--blue); }
+  .n-tool { border-color: #2fa89c; background: rgba(45,212,191,.07); }
+  .n-tool b { color: var(--teal); }
+  .n-provider { border-color: #b3802a; background: rgba(251,191,36,.07); }
+  .n-provider b { color: var(--amber); }
+  .n-data { border-color: #55555f; background: rgba(161,161,170,.06); }
+  .n-data b { color: var(--zinc); }
+  .arr { text-align: center; color: var(--dim); font-size: 15px; padding: 3px 0; }
+  .arr.l { text-align: left; padding-left: 34px; }
+  .arr.side { color: var(--muted); font-size: 12px; padding: 0 8px; white-space: nowrap; }
+  .branch { border: 1px dashed var(--yellow); border-radius: 10px; padding: 8px 12px; background: rgba(250,204,21,.05); font-size: 12.5px; color: var(--yellow); display: inline-block; }
+  .hflow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+  .legend span::before { content: "■"; margin-right: 6px; font-size: 10px; }
+  .lg-user::before { color: var(--violet); } .lg-agent::before { color: var(--blue); }
+  .lg-tool::before { color: var(--teal); } .lg-provider::before { color: var(--amber); } .lg-data::before { color: var(--zinc); }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--card2); color: #d6d3e8; font-weight: 600; white-space: nowrap; }
+  td.gap { color: var(--red); } td.have { color: var(--green); } td.part { color: var(--yellow); }
+  .note { font-size: 12.5px; color: var(--muted); background: var(--card); border-left: 3px solid var(--blue); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .note.warn { border-left-color: var(--red); }
+  .code { font-family: Consolas, monospace; font-size: 12px; color: var(--teal); background: rgba(45,212,191,.08); padding: 1px 6px; border-radius: 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } .vrow { grid-template-columns: 1fr; } .role { text-align: left; } }
+  footer { color: var(--dim); font-size: 12px; text-align: center; margin-top: 64px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Music Agent · 流程确认与差距审计</h1>
+  <div class="meta">生成于 2026-08-19 · 依据：代码实况（P0–P2 已交付并通过三路代码评审与回归测试）+ 对标拆解（MusicMake.ai / 海绵音乐 / Suno）· 用途：①验证现有流程自洽性 ②暴露与标杆的差距 ③服务 P2 产品决策</div>
+</header>
+
+<nav>
+  <a href="#verdict">结论</a>
+  <a href="#part1">第一部分 · 现状流程确认</a>
+  <a href="#part2">第二部分 · 差距审计</a>
+  <a href="#criteria">验证标准</a>
+  <a href="#roadmap">路线建议</a>
+</nav>
+
+<main>
+
+<!-- ═══════════ 结论 ═══════════ -->
+<section id="verdict">
+  <h2><span class="no">00</span>一页结论</h2>
+  <div class="verdict">
+    <p><span class="score warn">设计自洽 ✅ &nbsp;/&nbsp; 音乐化智能 ⚠️ 约 45%</span></p>
+    <p style="margin-top:12px;">
+      <b>流程结构有效</b>——创作链路（灵感→歌词→风格→生成→迭代）与真实词曲创作语义、Suno 官方双模式同构；数据模型（版本树/2 变体 A/B/LRC）天然服务「二创冲动」北极星；可靠性层（串行化/心跳/限流/持久化）已通过代码评审与回归实测。
+    </p>
+    <p style="margin-top:10px;">
+      <b>「为音乐设计而生」尚未兑现</b>——Agent 不会评估生成结果、不会自修复失败、没有项目上下文（<a href="#watershed">三个分水岭节点见 2.3</a>）；对 MusicMake 的工具面完成度约 40%，Agent 智能面是最大缺口。这些是 P2 的核心工作，也是与标杆的差异化所在。
+    </p>
+    <p style="margin-top:10px; color:var(--muted);">
+      判断依据：<a href="#part1">第一部分</a>为「设计自洽」提供证据；<a href="#part2">第二部分</a>为「智能缺口」提供对标证据；<a href="#criteria">验证标准</a>为 key 到位后的实测清单。
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════ 第一部分 ═══════════ -->
+<section id="part1">
+  <h2><span class="no">01</span>第一部分 · 现状流程确认（对应代码实况）</h2>
+  <p class="desc">本部分节点均可在代码中找到对应实现（标注文件路径），用于验证流程设计的自洽性。</p>
+
+  <h3>1.1 系统总览：Agent 运行时 + Provider 兼容层 + 异步任务</h3>
+  <div class="flow">
+    <div class="hflow">
+      <div class="node n-user"><b>用户（浏览器）</b><span class="sub">聊天页 / 歌曲详情 / 曲库 / 常驻播放栏</span></div>
+      <span class="arr side">SSE 对话<br><span class="code">POST /api/chat</span></span>
+      <div class="node n-tool"><b>串行化队列</b><span class="sub">queuePrompt 防并发事件串流<br><span class="code">lib/agent/pi.ts</span></span></div>
+      <span class="arr side">prompt()/subscribe()</span>
+      <div class="node n-agent"><b>pi Agent 运行时</b><span class="sub">DeepSeek / OpenAI 兼容中转站<br>系统提示词 = 音乐制作人 skill</span></div>
+      <span class="arr side">自定工具<br>（无文件/Bash 工具）</span>
+      <div class="node n-tool"><b>4 个音乐工具</b><span class="sub">generate / extend / cover /<br>replace_section</span></div>
+      <span class="arr side">提交→jobId</span>
+      <div class="node n-provider"><b>SunoProvider 兼容层</b><span class="sub">Mock（本地合成 WAV）<br>| sunoapi.org（V4.5ALL，真实生成）</span></div>
+    </div>
+    <div class="arr">↓</div>
+    <div class="hflow">
+      <div class="node n-data"><b>轮询 <span class="code">GET /api/jobs/[id]</span></b><span class="sub">幂等落库：variants / LRC / 状态<br>进度只增、429/5xx 不判死</span></div>
+      <span class="arr side">→</span>
+      <div class="node n-data"><b>SQLite</b><span class="sub">songs（parentId 版本树）· generation_jobs<br>· messages/chats（会话持久化）</span></div>
+      <span class="arr side">→</span>
+      <div class="node n-data"><b>UI 更新</b><span class="sub">生成卡片轮询 · 详情页实时进度<br>· 曲库自动刷新 · 同步歌词</span></div>
+    </div>
+    <div class="arr">↑ 可靠性层横切：按 IP 限流（12/10/20 每分）· SSE 心跳 15s + 断线看门狗 · mock 任务落盘与清扫 · 会话历史恢复</div>
+  </div>
+  <div class="legend">
+    <span class="lg-user">用户</span><span class="lg-agent">Agent（LLM）</span><span class="lg-tool">工具/服务端</span><span class="lg-provider">生成后端</span><span class="lg-data">数据/UI</span>
+  </div>
+
+  <h3>1.2 创作主流程（一次生成，含决策点）</h3>
+  <div class="flow">
+    <div class="vrow"><div class="role">用户</div><div class="node n-user"><b>① 自然语言描述歌曲想法</b><span class="sub">主题/情绪/风格/语言/时长 · 灵感 chips 降低输入门槛</span></div></div>
+    <div class="arr l">↓</div>
+    <div class="vrow"><div class="role">Agent</div><div class="node n-agent"><b>② 理解需求 → 给出编曲方案</b><span class="sub">曲风/结构/唱法 2-3 句简述，不啰嗦</span></div></div>
+    <div class="arr l">↓ 决策：信息不足？</div>
+    <div class="vrow"><div class="role"></div><div><span class="branch">是 → 最多追问 1 个关键问题（回到 ①）</span>　<span class="branch">否 → 继续</span></div></div>
+    <div class="arr l">↓</div>
+    <div class="vrow"><div class="role">Agent</div><div class="node n-agent"><b>③ 写完整歌词（音乐域知识注入）</b><span class="sub">[Intro]/[Verse]/[Chorus]/[Bridge]/[Outro] 结构标记 · hook 记忆点 · 押韵自然 · 无占位符 · 拼读友好词 · 数字写全拼</span></div></div>
+    <div class="arr l">↓</div>
+    <div class="vrow"><div class="role">Agent</div><div class="node n-agent"><b>④ 精选风格标签（2–6 个）</b><span class="sub">曲风 + 情绪 + 唱腔，如 "dreamy pop, female vocals, lofi" · 一句话说明为什么这样选</span></div></div>
+    <div class="arr l">↓ 调用工具</div>
+    <div class="vrow"><div class="role">工具</div><div class="node n-tool"><b>⑤ generate_music → submitGeneration</b><span class="sub">事务写入 song 行（processing）+ job 行 · 立即返回 jobId，Agent 循环不被阻塞<br><span class="code">lib/agent/generate-song.ts</span></span></div></div>
+    <div class="arr l">↓ 提交异步任务</div>
+    <div class="vrow"><div class="role">后端</div><div class="node n-provider"><b>⑥ 生成执行（异步）</b><span class="sub">Mock：排队→结构分析→和弦→旋律→渲染→混音（本地合成 2 变体 WAV）<br>sunoapi：PENDING → TEXT_SUCCESS → FIRST_SUCCESS → SUCCESS（真实任务）</span></div></div>
+    <div class="arr l">↓ 前端轮询（1.5s–3s 间隔）</div>
+    <div class="vrow"><div class="role">数据</div><div class="node n-data"><b>⑦ 完成 → 幂等落库</b><span class="sub">2 个变体（A/B 对比）· 逐行时间戳歌词（LRC）· 状态 done</span></div></div>
+    <div class="arr l">↓</div>
+    <div class="vrow"><div class="role">用户</div><div class="node n-user"><b>⑧ 试听与进入迭代</b><span class="sub">生成卡片即点播放 V1/V2 → 详情页波形 + 同步歌词 → 对话说「再长一点/换个风格」或详情页按钮</span></div></div>
+  </div>
+
+  <h3>1.3 迭代闭环与版本树（对标「二创冲动」北极星）</h3>
+  <div class="flow">
+    <div class="hflow">
+      <div class="node n-user"><b>已完成歌曲</b><span class="sub">任一版本节点</span></div>
+      <span class="arr side">→</span>
+      <div class="node n-tool"><b>Extend</b><span class="sub">向后延续<br>continueAt = 时长 − 参考秒</span></div>
+      <span class="arr side">→</span>
+      <div class="node n-tool"><b>Cover</b><span class="sub">新风格重新演绎<br>指令不当歌词唱</span></div>
+      <span class="arr side">→</span>
+      <div class="node n-tool"><b>Replace Section</b><span class="sub">按时间区间替换段落<br>（后端就绪，UI 待启用）</span></div>
+    </div>
+    <div class="arr">↓ 每次迭代创建子歌曲（parentId 指向原歌）</div>
+    <div class="hflow">
+      <div class="node n-data"><b>版本树</b><span class="sub">父版本 ← 当前 → 衍生版本<br>详情页可点击、可试听</span></div>
+      <span class="arr side">→ 再迭代（循环）→</span>
+      <div class="node n-user"><b>二创冲动闭环</b><span class="sub">每首歌都是下一次创作入口<br>（Suno 留存的核心指标）</span></div>
+    </div>
+    <div class="note warn">已知边界：前置延长（加前奏）sunoapi 不支持，Agent 会如实说明并建议用翻唱变通；替换段落需要时间区间确认。</div>
+  </div>
+
+  <h3>1.4 任务状态机与数据同步规则</h3>
+  <div class="flow">
+    <div class="hflow">
+      <div class="node n-data"><b>songs.status</b><span class="sub">draft → processing → done / failed</span></div>
+      <span class="arr side">↕ 轮询同步</span>
+      <div class="node n-data"><b>generation_jobs.status</b><span class="sub">pending → processing → success / failed</span></div>
+    </div>
+    <table>
+      <tr><th>场景</th><th>规则（已实现并回归验证）</th></tr>
+      <tr><td>任务成功</td><td class="have">落库 2 变体 + LRC + status=done；守卫更新（并发轮询只完成一次）</td></tr>
+      <tr><td>成功但结果为空</td><td class="have">标记 failed（error: 生成完成但未返回音频），避免僵尸 processing</td></tr>
+      <tr><td>限流 429 / 服务端 5xx / 网络抖动</td><td class="have">保持 processing，进度只增不减——终态只认 Provider 状态枚举</td></tr>
+      <tr><td>敏感词拦截</td><td class="have">failed + 明确错误信息（内容审核未通过）</td></tr>
+      <tr><td>mock 服务重启</td><td class="have">任务落盘恢复 → 进行中标记中断失败 → 曲库页惰性清扫</td></tr>
+    </table>
+  </div>
+
+  <h3>1.5 可靠性层（P2 已交付，防「前期检验没做好」）</h3>
+  <div class="grid2">
+    <div class="node n-tool"><b>并发安全</b><span class="sub">提示词串行化队列，防多标签页事件串流与消息丢失</span></div>
+    <div class="node n-tool"><b>断线处理</b><span class="sub">SSE 心跳 15s + 客户端 50s 看门狗；无工具调用时安全自动重试一次（不重复扣费）</span></div>
+    <div class="node n-tool"><b>会话持久化</b><span class="sub">消息写穿透落库 + 刷新自动恢复历史 + 新对话</span></div>
+    <div class="node n-tool"><b>限流与额度</b><span class="sub">按 IP 滑动窗口（聊天 12/分、迭代 10/分）；credits 接口（真实余额/今日生成数）</span></div>
+  </div>
+</section>
+
+<!-- ═══════════ 第二部分 ═══════════ -->
+<section id="part2">
+  <h2><span class="no">02</span>第二部分 · 差距审计（对标 MusicMake / 海绵音乐）</h2>
+  <p class="desc">结论先行：<b>工具面完成度约 40%，Agent 智能面是最大缺口</b>——后者正是「为音乐设计而生」的分水岭。</p>
+
+  <h3>2.1 MusicMake「五步工作流」对标</h3>
+  <table>
+    <tr><th>MusicMake 步骤</th><th>能力</th><th>我们现状</th><th>差距说明</th></tr>
+    <tr>
+      <td rowspan="4"><b>Create<br>创建第一版</b></td>
+      <td>Generate Music</td><td class="have">✅ 已实现</td><td>一次 2 变体 A/B，与标杆一致</td>
+    </tr>
+    <tr><td>Lyrics to Song</td><td class="have">✅ 已实现</td><td>歌词模式即 customMode</td></tr>
+    <tr><td>AI Lyrics / AI Style</td><td class="part">⚠️ Agent 内嵌</td><td>能力有（LLM 写词/选标签），但未工具化为独立入口</td></tr>
+    <tr><td class="gap">参考图片 + 参考音频</td><td class="gap">❌ 缺失</td><td>两家标杆都有（"Add image/audio"、添加参考音乐）；sunoapi 有 upload-extend/upload-cover 可接</td></tr>
+    <tr>
+      <td rowspan="4"><b>Transform<br>做出新版本</b></td>
+      <td>Cover</td><td class="have">✅ 已实现</td><td>上传型两步（源 URL→上传→翻唱），指令不当歌词</td>
+    </tr>
+    <tr><td>Add Vocals</td><td class="gap">❌ 缺失</td><td>sunoapi 有 /generate/add-vocals API 未接</td></tr>
+    <tr><td>Add Instrumental</td><td class="gap">❌ 缺失</td><td>sunoapi 有 /generate/add-instrumental API 未接</td></tr>
+    <tr><td>Mashup</td><td class="gap">❌ 缺失</td><td>sunoapi 有 /generate/mashup API 未接</td></tr>
+    <tr>
+      <td rowspan="2"><b>Fix<br>修复或延长</b></td>
+      <td>Extend</td><td class="part">⚠️ 部分</td><td>向后延续已实现；前置延长（加前奏）sunoapi 不支持</td>
+    </tr>
+    <tr><td>Replace Section</td><td class="part">⚠️ 后端就绪</td><td>适配器与 Agent 工具已实现，UI 未启用（需时间区间交互）</td></tr>
+    <tr>
+      <td rowspan="3"><b>Extract<br>提取素材</b></td>
+      <td>Vocal Remover / Stems</td><td class="gap">❌ 缺失</td><td>sunoapi 有 /vocal-removal（10–50 credits）未接</td>
+    </tr>
+    <tr><td>Audio → MIDI</td><td class="gap">❌ 缺失</td><td>sunoapi 有 /midi 未接</td></tr>
+    <tr><td>MIDI Editor</td><td class="gap">❌ 缺失</td><td>前端无编辑器（P3 候选）</td></tr>
+    <tr>
+      <td rowspan="3"><b>Reuse<br>保存复用</b></td>
+      <td>Download</td><td class="part">⚠️ 隐式</td><td>变体 URL 可直接下载，无显式下载按钮</td>
+    </tr>
+    <tr><td>版本管理</td><td class="have">✅ 已实现</td><td>parentId 版本树（对标 ai-music-studio 模式）</td></tr>
+    <tr><td>分享 / 社区</td><td class="gap">❌ 缺失</td><td>公开分享、社区精选 feed（P3）</td></tr>
+  </table>
+
+  <h3>2.2 Agent 智能面对标（MusicMake 的核心卖点）</h3>
+  <table>
+    <tr><th>MusicMake Agent 能力</th><th>我们现状</th><th>差距说明</th></tr>
+    <tr><td class="gap">「说结果，Agent 自动选工具」</td><td class="gap">❌</td><td>用户必须自己知道用 extend/cover 哪个工具；LLM 有工具集但无「意图→工具选择」的显式路由设计</td></tr>
+    <tr><td class="gap">@My Music 上下文（引用已存歌曲/上传音频/当前结果）</td><td class="gap">❌</td><td>对话中无法引用曲库歌曲；工具靠 songId 传参，LLM 不感知曲库</td></tr>
+    <tr><td class="gap">自动修复失败（版权→改写原创 / 审核→安全措辞 / 参数→补齐重试）</td><td class="gap">❌</td><td>失败只是如实报告，无自修复循环；sunoapi 的 SENSITIVE_WORD_ERROR 可触发改写重试，未实现</td></tr>
+    <tr><td class="gap">生成后评估（Agent 对比变体、判断质量）</td><td class="gap">❌</td><td>Agent 不「听」结果，不评估；变体对比全交给用户</td></tr>
+    <tr><td>创作上下文保持（不提工具、不重写提示词）</td><td class="part">⚠️ 部分</td><td>pi 会话保持对话上下文；但无项目级状态（无「当前正在做的歌」概念）</td></tr>
+  </table>
+
+  <h3>2.3 海绵音乐玩法对标（国内玩法层，P2 候选）</h3>
+  <table>
+    <tr><th>海绵音乐玩法</th><th>我们现状</th><th>差距说明</th></tr>
+    <tr><td>一句话生成 / 对话写歌</td><td class="have">✅</td><td>核心路径一致</td></tr>
+    <tr><td class="gap">仿写热门歌曲</td><td class="gap">❌</td><td>版权高风险，需法务评审前置（字节有曲库授权，我们没有）</td></tr>
+    <tr><td class="gap">相册成曲</td><td class="gap">❌</td><td>多模态输入（图片→歌曲主题），P2 后段候选</td></tr>
+    <tr><td class="part">音色克隆</td><td class="part">⚠️ 未接</td><td>sunoapi 有完整 Voice API（验证→录音→voiceId→persona）；声音权益合规前置</td></tr>
+    <tr><td class="part">AI 改词</td><td class="part">⚠️ LLM 能力有</td><td>未工具化；可做成独立工具（改词不重新生成）</td></tr>
+    <tr><td class="gap">参考音乐</td><td class="gap">❌</td><td>同 2.1 参考音频</td></tr>
+  </table>
+
+  <h3 id="watershed">2.4 「为音乐设计而生」的三个分水岭节点</h3>
+  <p class="desc">判定标准：通用聊天 + 生成 API = 薄客户端；具备以下三节点 = 音乐域 Agent。当前完成度 ≈ 45%。</p>
+  <table>
+    <tr><th>分水岭节点</th><th>现状</th><th>差距</th><th>优先级</th></tr>
+    <tr>
+      <td><b>① 音乐结构语义</b></td>
+      <td class="part">文本层结构标记（LLM 写，无程序校验）</td>
+      <td>段落级操作（按 Verse/Chorus 定位替换而非盲选时间区间）；词级时间戳对齐（sunoapi 有 aligned-lyrics API 未接）；结构校验门禁</td>
+      <td>P2</td>
+    </tr>
+    <tr>
+      <td><b>② 生成后评估与自修复</b></td>
+      <td class="gap">无（Agent 只报任务状态，不「听」结果）</td>
+      <td>变体对比评估（LLM 判断两变体差异与优劣）；失败自修复（敏感词→改写重试、参数错误→补齐重试）；质量门禁反馈</td>
+      <td><b>P2 第一优先</b>（差异化所在）</td>
+    </tr>
+    <tr>
+      <td><b>③ 上下文与项目感</b></td>
+      <td class="part">单会话聊天 + 版本树雏形</td>
+      <td>@曲库引用（对话中说「用上次那首」）；Reuse Prompt（从任意生成复用参数）；「当前项目/歌曲」的持续上下文</td>
+      <td>P2–P3</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ═══════════ 验证标准 ═══════════ -->
+<section id="criteria">
+  <h2><span class="no">03</span>验证标准（key 到位后的实测清单）</h2>
+  <p class="desc">流程图只能证明设计自洽；以下指标是「流程是否真的有效」的实证判据——没有它们，任何图都是纸面设计。</p>
+  <table>
+    <tr><th>指标</th><th>怎么测</th><th>通过线（建议）</th></tr>
+    <tr><td>一次生成可用率</td><td>N 次生成中「试听后保留」的比例</td><td>≥ 50%</td></tr>
+    <tr><td>中文歌词质量</td><td>人工抽查：结构完整 / 发音友好 / 押韵自然 / hook 存在</td><td>4/4 通过 ≥ 80%</td></tr>
+    <tr><td>迭代成功率</td><td>extend/cover 任务完成率 + 用户对迭代结果的满意率</td><td>完成率 ≥ 95%，满意率 ≥ 50%</td></tr>
+    <tr><td>二创转化</td><td>生成第一首后 24h 内发起第二次生成/第一次迭代的比例</td><td>≥ 30%（Suno 的核心验证信号）</td></tr>
+    <tr><td>体感时长</td><td>提交到可试听（stream 级）的等待</td><td>≤ 40s 见 stream，≤ 3min 完整</td></tr>
+    <tr><td>异常恢复</td><td>断网/重启/限流场景下用户可理解、可恢复</td><td>0 个「永久卡死」</td></tr>
+  </table>
+  <div class="note">这六项指标的基线数据，就是「为音乐设计而生」从口号变成事实的证据。</div>
+</section>
+
+<!-- ═══════════ 路线建议 ═══════════ -->
+<section id="roadmap">
+  <h2><span class="no">04</span>P2 路线建议（按审计结论排序）</h2>
+  <table>
+    <tr><th>优先级</th><th>工作项</th><th>理由</th></tr>
+    <tr><td><b>P2-1</b></td><td>生成后评估与自修复（敏感词→改写重试、参数→补齐重试、变体对比评估）</td><td>Agent 智能面是唯一能做出差异化、且「为音乐设计而生」最短路径的一块</td></tr>
+    <tr><td><b>P2-2</b></td><td>「说结果，Agent 选工具」路由 + @曲库引用 + Reuse Prompt</td><td>对齐 MusicMake 的 Agent 核心体验，降低用户认知负担</td></tr>
+    <tr><td><b>P2-3</b></td><td>参考音频输入 + 段落级操作（词级对齐驱动替换段落）+ Replace Section UI</td><td>补齐两家标杆共有的创作入口，打通结构语义节点</td></tr>
+    <tr><td><b>P2-4</b></td><td>玩法层（仿写热歌 / 音色克隆）——<b>先过国内合规评审</b></td><td>仿写=版权高风险、音色克隆=声音权益；海绵是字节法务背书，我们没有。备案/标识/ICP 同步排期</td></tr>
+    <tr><td><b>P2-5</b></td><td>提取类工具（Stem / MIDI）+ 下载按钮</td><td>sunoapi 已有 API，纯接入成本，按需插队</td></tr>
+  </table>
+  <div class="note">P1-4（真实 key 实测）与 P2-1 可并行：实测数据直接喂给「评估与自修复」的设计。</div>
+</section>
+
+<footer>
+  Music Agent 流程确认与差距审计 · 依据代码实况与对标拆解生成 · 供评审拍板使用
+</footer>
+
+</main>
+</body>
+</html>
