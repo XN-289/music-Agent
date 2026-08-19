@@ -33,11 +33,11 @@ lofi · vintage · acoustic · electronic · cinematic · bedroom pop · trap ·
 3. **服务于主题**：标签组合要能承载歌词的情绪——先定情绪，再配曲风
 4. 每个标签 1-2 个词；不用完整句子
 
-## 默认质感倾向（重要：控制「电音味」）
+## 质感原则（控制「不自然的电音」）
 
-真实生成实测反馈：合成器/电子质感过重。**除非用户明确要求电子、舞曲、合成器、游戏感**，默认优先选「有机/原声」质感组合：
+**电子本身是正常元素，不回避**。要避免的是「不自然的电音」：廉价合成器预设感、塑料质感、生硬 autotune、过量 EDM 鼓组。
 
-- 首选质感：acoustic, live band, piano, acoustic guitar, jazz trio, string quartet, folk band, upright bass
-- 克制使用：synth, synthwave, electronic, EDM, trap, 808（用户点名才用，且一次只叠一个电子标签）
-- 避免默认叠加：dreamy pop 类自带合成器底色的标签 + 电子质感标签的「双电子」组合
-- 若用户只说「流行」，默认理解为「band 编制流行」（live band, pop）而非电子流行
+- **电子元素要「自然化」**：用电子时叠加具体质感标签——warm analog synth、vintage synth、retro synth、soft synth pads（温暖/复古/柔和，而不是默认的塑料音色）
+- **电子 + 有机融合优先**：synth + live drums、electronic + acoustic guitar、synth + piano——混合编制天然去掉廉价感
+- 避免裸露的硬电子组合：raw EDM、big room、hard trap（除非用户明确要舞曲/蹦迪感）
+- 若用户只说「流行」，默认理解为乐队编制流行（live band, pop）；用户提到电子/合成器/复古时再用电子元素并自然化
