@@ -194,10 +194,14 @@ const inspectSongToolDef = defineTool({
   }),
   execute: async (_toolCallId, params) => {
     const info = await getSongForAgent(params.songId);
+    // 统一 details 形状，避免 defineTool 泛型推断分叉
+    const details: { songId: string; status: string | null; error: string | null } = info
+      ? { songId: params.songId, status: info.status, error: info.error }
+      : { songId: params.songId, status: null, error: null };
     if (!info) {
       return {
         content: [{ type: 'text', text: '歌曲不存在，请让用户确认 songId' }],
-        details: { songId: params.songId, status: null, error: null },
+        details,
       };
     }
     const lines = [
@@ -209,7 +213,7 @@ const inspectSongToolDef = defineTool({
     ];
     return {
       content: [{ type: 'text', text: lines.join('\n') }],
-      details: { songId: params.songId, status: info.status, error: info.error },
+      details,
     };
   },
 }) as ToolDefinition;
