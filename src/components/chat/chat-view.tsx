@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { GenerationCard } from "./generation-card";
@@ -118,9 +119,28 @@ export function ChatView() {
   const lastActivityRef = useRef(0);
   const sawToolStartRef = useRef(false);
   const autoRetriedRef = useRef(false);
+  const reuseHandledRef = useRef(false);
   // 收到过增量流的消息 id：完整文本兜底（delta）不应覆盖已流式累积的文本
   const streamedRef = useRef(new Set<string>());
   const chatIdRef = useRef<string>("default");
+  const searchParams = useSearchParams();
+
+  // Reuse Prompt：从详情页跳转 ?reuse=songId → 预填创作输入（复用提示词与风格）
+  useEffect(() => {
+    const reuse = searchParams.get("reuse");
+    if (!reuse || reuseHandledRef.current) return;
+    reuseHandledRef.current = true;
+    void fetch(`/api/songs/${reuse}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s: { title?: string; prompt?: string | null; styleTags?: string[] | null } | null) => {
+        if (!s?.title) return;
+        const tags = s.styleTags?.length ? `（风格标签：${s.styleTags.join(", ")}）` : "";
+        setInput(
+          `复用《${s.title}》的提示词与风格，创作一首新歌${s.prompt ? `：${s.prompt}` : ""}${tags}`,
+        );
+      })
+      .catch(() => {});
+  }, [searchParams]);
 
   // 会话初始化：localStorage 里的 chatId（SSR 时无 window，挂载后再取）
   useEffect(() => {

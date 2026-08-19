@@ -1,7 +1,7 @@
 // 生成/迭代的共享业务逻辑：pi 工具与 API 路由共用。
 // 职责：生成应用层 songId、落库歌曲行与任务行、解析迭代所需的 provider 原生音频 id。
 import crypto from 'node:crypto';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, like, or } from 'drizzle-orm';
 import { getProvider } from '@/lib/providers';
 import { db, schema } from '@/lib/db';
 
@@ -147,4 +147,21 @@ export async function getSongForAgent(songId: string) {
     variants: song.variants ?? [],
     parentId: song.parentId,
   };
+}
+
+/** 曲库搜索（search_my_songs 工具用）：按标题/风格描述模糊匹配 */
+export async function searchSongs(query: string, limit = 10) {
+  const pattern = `%${query.trim()}%`;
+  return db
+    .select({
+      id: schema.songs.id,
+      title: schema.songs.title,
+      styleTags: schema.songs.styleTags,
+      prompt: schema.songs.prompt,
+      status: schema.songs.status,
+    })
+    .from(schema.songs)
+    .where(or(like(schema.songs.title, pattern), like(schema.songs.prompt, pattern)))
+    .orderBy(desc(schema.songs.createdAt))
+    .limit(limit);
 }

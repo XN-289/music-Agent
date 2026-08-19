@@ -275,7 +275,13 @@ export function SongDetailClient({
               )}
               Cover / Remix
             </Button>
-            <Button variant="outline" size="sm" disabled title="P2 上线：复用提示词">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={song.status !== "done"}
+              title="复用这首歌的提示词与风格，创作新歌"
+              onClick={() => router.push(`/?reuse=${song.id}`)}
+            >
               <Copy className="h-3.5 w-3.5" /> Reuse Prompt
             </Button>
           </div>

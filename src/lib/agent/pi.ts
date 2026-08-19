@@ -28,6 +28,7 @@ import {
   commitIteration,
   getSongForAgent,
   resolveSongForIteration,
+  searchSongs,
   submitGeneration,
 } from './generate-song';
 
@@ -218,12 +219,40 @@ const inspectSongToolDef = defineTool({
   },
 }) as ToolDefinition;
 
+const searchSongsToolDef = defineTool({
+  name: 'search_my_songs',
+  label: '搜索曲库',
+  description:
+    '在用户曲库里按关键词搜索已生成的歌曲（匹配标题/风格描述），返回 songId 与基本信息。用户提到「上次那首」「那首关于xx的歌」时先调用它拿到 songId，再用迭代工具操作。',
+  promptSnippet: 'search_my_songs(query) → [{ id, title, styleTags, status }]',
+  parameters: Type.Object({
+    query: Type.String({ description: '搜索关键词（歌名/主题/风格）' }),
+  }),
+  execute: async (_toolCallId, params) => {
+    const songs = await searchSongs(params.query);
+    if (songs.length === 0) {
+      return {
+        content: [{ type: 'text', text: '曲库中没有匹配的歌曲，请让用户确认描述' }],
+        details: { results: [] },
+      };
+    }
+    const text = songs
+      .map((s) => `- ${s.id}｜${s.title}｜${s.styleTags?.join(', ') ?? ''}｜${s.status}`)
+      .join('\n');
+    return {
+      content: [{ type: 'text', text }],
+      details: { results: songs.map((s) => ({ id: s.id, title: s.title })) },
+    };
+  },
+}) as ToolDefinition;
+
 const CUSTOM_TOOLS: ToolDefinition[] = [
   generateMusicToolDef,
   extendMusicToolDef,
   coverMusicToolDef,
   replaceSectionToolDef,
   inspectSongToolDef,
+  searchSongsToolDef,
 ];
 
 // ---------- 会话单例 ----------
