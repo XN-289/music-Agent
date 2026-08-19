@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/dialog";
-import { ArrowLeft, Copy, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
 
 export interface SongDetailData {
   id: string;
@@ -247,20 +247,27 @@ export function SongDetailClient({
           <div className="mt-5">
             <WaveformPlayer key={active.id} url={active.audioUrl} variantId={active.id} />
           </div>
-          {variants.length > 1 && (
-            <div className="mt-4 flex gap-2">
-              {variants.map((v, i) => (
-                <Button
-                  key={v.id}
-                  size="sm"
-                  variant={i === variantIdx ? "default" : "outline"}
-                  onClick={() => setVariantIdx(i)}
-                >
-                  {v.id.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {variants.map((v, i) => (
+              <Button
+                key={v.id}
+                size="sm"
+                variant={i === variantIdx ? "default" : "outline"}
+                onClick={() => setVariantIdx(i)}
+              >
+                {v.id.toUpperCase()}
+              </Button>
+            ))}
+            {active && (
+              <a
+                href={active.audioUrl}
+                download={`${song.title}-${active.id}.mp3`}
+                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Download className="h-3.5 w-3.5" /> 下载
+              </a>
+            )}
+          </div>
         </div>
       )}
 
