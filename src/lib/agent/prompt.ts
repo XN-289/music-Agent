@@ -21,6 +21,7 @@ function readPart(file: string, title: string): string {
 
 export const SYSTEM_PROMPT = [
   readPart('prompt.md', ''),
+  readPart('domain/lyric-writing.md', '领域知识 · 专属写词 Skill（去 AI 味歌词规范，强制）'),
   readPart('domain/style-tags.md', '领域知识 · 风格标签库'),
   readPart('domain/song-structure.md', '领域知识 · 歌曲结构规范'),
   readPart('domain/pronunciation-quirks.md', '领域知识 · 发音怪癖清单'),
