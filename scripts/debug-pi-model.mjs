@@ -32,7 +32,8 @@ try {
   for await (const ev of stream) {
     if (ev.type === 'text_delta') process.stdout.write(ev.delta);
     else if (ev.type === 'done' || ev.type === 'error') {
-      console.log(`\n[${ev.type}] full:`, JSON.stringify(ev.final, null, 1).slice(0, 800));
+      const finalMsg = ev.type === 'done' ? ev.message : ev.error;
+      console.log(`\n[${ev.type}]`, JSON.stringify(finalMsg ?? null, null, 1).slice(0, 800));
     } else if (ev.type === 'thinking_delta') {
       process.stdout.write('.');
     } else {

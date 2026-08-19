@@ -78,6 +78,13 @@ const STATUS_MAP: Record<string, { status: JobInfo['status']; progress: number; 
   SUCCESS: { status: 'success', progress: 100, stage: '完成' },
 };
 
+// callBackUrl 是 sunoapi 提交接口的必填字段（实测强制校验："Please enter callBackUrl."）。
+// 本地开发没有公网回调地址：用占位 URL 满足校验，任务进度完全走轮询；
+// 部署到公网后用 SUNO_CALLBACK_URL 换成真实回调端点。
+function callbackUrl(): string {
+  return process.env.SUNO_CALLBACK_URL ?? 'https://example.com/sunoapi-callback';
+}
+
 export class SunoApiProvider implements SunoProvider {
   readonly id = 'sunoapi';
   readonly displayName = 'sunoapi.org（Suno V4/V4.5/V5 第三方 API）';
@@ -115,6 +122,7 @@ export class SunoApiProvider implements SunoProvider {
           instrumental: input.instrumental ?? false,
           prompt: input.prompt ?? input.styleTags.join(', '),
           model: input.model ?? DEFAULT_MODEL,
+          callBackUrl: callbackUrl(),
         },
       });
       return { jobId: data.taskId };
@@ -125,6 +133,7 @@ export class SunoApiProvider implements SunoProvider {
       customMode,
       instrumental: input.instrumental ?? false,
       model: input.model ?? DEFAULT_MODEL,
+      callBackUrl: callbackUrl(),
     };
     if (customMode) {
       // custom 模式：prompt 即歌词（逐字演唱），style/title 必填
@@ -153,14 +162,17 @@ export class SunoApiProvider implements SunoProvider {
       // 无自定义参数时用源曲参数续写（defaultParamFlag:false）；有自定义时 style/continueAt 必填
       defaultParamFlag: hasCustom,
       model: DEFAULT_MODEL,
+      callBackUrl: callbackUrl(),
     };
     if (hasCustom) {
+      // defaultParamFlag:true 时 continueAt 必填（0 < continueAt < 总时长），缺了直接失败而非发出残缺请求
+      if (input.continueAt == null || input.continueAt <= 0) {
+        throw new Error('extend 需要有效的 continueAt（续写起点秒数）');
+      }
       body.prompt = input.prompt ?? ''; // instrumental 缺省时 prompt 必填；暂按非纯音乐处理
       body.style = input.styleTags?.join(', ') || 'Pop';
       body.title = input.title;
-      if (input.continueAt != null && input.continueAt > 0) {
-        body.continueAt = input.continueAt;
-      }
+      body.continueAt = input.continueAt;
     }
     const data = await api<{ taskId: string }>('/api/v1/generate/extend', { body });
     return { jobId: data.taskId };
@@ -192,6 +204,7 @@ export class SunoApiProvider implements SunoProvider {
       customMode,
       instrumental: false,
       model: DEFAULT_MODEL,
+      callBackUrl: callbackUrl(),
     };
     if (customMode) {
       body.prompt = input.lyrics;
@@ -218,6 +231,7 @@ export class SunoApiProvider implements SunoProvider {
         infillStartS: input.infillStartS,
         infillEndS: input.infillEndS,
         fullLyrics: input.fullLyrics,
+        callBackUrl: callbackUrl(),
       },
     });
     return { jobId: data.taskId };

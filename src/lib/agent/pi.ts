@@ -83,19 +83,18 @@ const extendMusicToolDef = defineTool({
     contextSeconds: Type.Optional(Type.Number({ description: '参考原始结尾多少秒' })),
   }),
   execute: async (_toolCallId, params) => {
-    const { variant } = await resolveSongForIteration(params.songId);
+    const { song, variant } = await resolveSongForIteration(params.songId);
     const provider = getProvider();
-    // contextSeconds 是「参考原曲结尾多少秒」，sunoapi 的 continueAt 是续写起点 → 换算
-    const continueAt =
-      params.contextSeconds != null && params.contextSeconds > 0
-        ? Math.max(1, Math.round((variant.durationSec || 24) - params.contextSeconds))
-        : undefined;
+    // continueAt 是续写起点：默认参考结尾 30 秒上下文
+    const ctxSec = params.contextSeconds != null && params.contextSeconds > 0 ? params.contextSeconds : 30;
+    const continueAt = Math.max(1, Math.round((variant.durationSec || 24) - ctxSec));
     const { jobId } = await provider.extend({
       audioId: variant.audioId!,
       direction: params.direction,
       prompt: params.prompt,
       contextSeconds: params.contextSeconds,
       continueAt,
+      styleTags: song.styleTags ?? [],
       title: `${variant.title} (Extended)`,
       sourceAudioUrl: variant.audioUrl,
     });

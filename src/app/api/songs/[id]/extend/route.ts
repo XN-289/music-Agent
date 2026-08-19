@@ -19,19 +19,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } | null;
 
   try {
-    const { variant } = await resolveSongForIteration(id);
+    const { song, variant } = await resolveSongForIteration(id);
     const provider = getProvider();
-    // contextSeconds 是「参考原曲结尾多少秒」，sunoapi 的 continueAt 是续写起点 → 换算
-    const continueAt =
-      typeof body?.contextSeconds === 'number' && body.contextSeconds > 0
-        ? Math.max(1, Math.round((variant.durationSec || 24) - body.contextSeconds))
-        : undefined;
+    // continueAt 是续写起点（0 < continueAt < 总时长）：
+    // 默认参考结尾 30 秒上下文；用户给的 contextSeconds 是「参考原曲结尾多少秒」
+    const ctxSec = typeof body?.contextSeconds === 'number' && body.contextSeconds > 0 ? body.contextSeconds : 30;
+    const continueAt = Math.max(1, Math.round((variant.durationSec || 24) - ctxSec));
     const { jobId } = await provider.extend({
       audioId: variant.audioId!,
       direction: body?.direction === 'start' ? 'start' : 'end',
       prompt: body?.prompt,
       contextSeconds: body?.contextSeconds,
       continueAt,
+      styleTags: song.styleTags ?? [],
       title: `${variant.title} (Extended)`,
       sourceAudioUrl: variant.audioUrl,
     });
