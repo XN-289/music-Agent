@@ -114,6 +114,8 @@ export interface SunoProvider {
   getCredits?(): Promise<{ credits: number }>;
   /** 词级时间戳歌词（可选实现；返回空数组时由调用层回退均分行） */
   getTimestampedLyrics?(taskId: string, audioId: string): Promise<LyricsLine[]>;
+  /** 参考音频上传：本地文件 → 后端托管 URL（sunoapi 临时存储 3 天，mock 返回假 URL） */
+  uploadReferenceFile(file: { base64: string; fileName: string }): Promise<{ downloadUrl: string }>;
   // P1.5+ 扩展点（对齐调研结论的接口设计）：
   // generateLyrics / mashup / concat / stemSplit
   // listPersonas / createPersona / deletePersona / download

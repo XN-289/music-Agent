@@ -234,6 +234,11 @@ export class MockSunoProvider implements SunoProvider {
     }
   }
 
+  /** 参考音频上传（mock）：不真传，返回假 URL，用于离线演示上传链路 */
+  async uploadReferenceFile(file: { base64: string; fileName: string }): Promise<{ downloadUrl: string }> {
+    return { downloadUrl: `https://mock.local/audio/refs/${encodeURIComponent(file.fileName)}` };
+  }
+
   async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
     const jobId = crypto.randomUUID();
     // 敏感词测试通道：歌词含【敏感词测试】时立即失败，用于演示/测试 Agent 修复闭环

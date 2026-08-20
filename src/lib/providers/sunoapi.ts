@@ -153,6 +153,38 @@ export class SunoApiProvider implements SunoProvider {
     'mashup',
   ]);
 
+  /** 参考音频上传：客户端本地文件 → sunoapi 临时托管（3 天自动删除）→ 公开 URL */
+  async uploadReferenceFile(file: { base64: string; fileName: string }): Promise<{ downloadUrl: string }> {
+    let res: Response;
+    try {
+      res = await fetch(`${UPLOAD_BASE}/api/file-base64-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey()}`,
+        },
+        body: JSON.stringify({
+          base64Data: file.base64,
+          uploadPath: 'audio/refs',
+          fileName: file.fileName,
+        }),
+      });
+    } catch (e) {
+      throw new ApiError('network', `上传网络错误: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const json = (await res.json().catch(() => null)) as {
+      code?: number | string;
+      msg?: string;
+      data?: { downloadUrl?: string };
+      downloadUrl?: string;
+    } | null;
+    const url = json?.data?.downloadUrl ?? json?.downloadUrl;
+    if (!res.ok || !url) {
+      throw new ApiError(json?.code ?? res.status, `${json?.msg ?? '上传失败'}（HTTP ${res.status}）`);
+    }
+    return { downloadUrl: url };
+  }
+
   async generateMusic(input: GenerateMusicInput): Promise<GenerateResult> {
     validateGenerate(input);
     // 参考音频 → upload-cover 通道：上传参考曲目后按描述重演（音频到音频风格迁移）

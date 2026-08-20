@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Copy, Download, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
 
 export interface SongDetailData {
   id: string;
@@ -37,13 +37,13 @@ export function SongDetailClient({
   jobId,
   lrc,
   parent,
-  children,
+  childVersions,
 }: {
   song: SongDetailData;
   jobId: string | null;
   lrc: LyricsLine[];
   parent: SongDetailData | null;
-  children: SongDetailData[];
+  childVersions: SongDetailData[];
 }) {
   const router = useRouter();
   const [variantIdx, setVariantIdx] = useState(0);
@@ -66,14 +66,13 @@ export function SongDetailClient({
   const [replaceEnd, setReplaceEnd] = useState("");
   const [iterError, setIterError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushSuccess, setPushSuccess] = useState(false);
 
   // 实时进度（M3）：轮询过程中用本地状态刷新进度条，服务端 props 只在终态时刷新
   const [live, setLive] = useState<{ progress: number; stage: string } | null>(null);
   const iterAbortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    setLive(null);
-  }, [song.id, song.status]);
 
   // 卸载时中止进行中的迭代轮询
   useEffect(() => {
@@ -169,6 +168,30 @@ export function SongDetailClient({
       infillStartS: Number(replaceStart),
       infillEndS: Number(replaceEnd),
     });
+  }
+
+  async function pushToFolia() {
+    if (pushBusy) return;
+    setPushBusy(true);
+    setPushError(null);
+    setPushSuccess(false);
+    try {
+      const res = await fetch(`/api/songs/${song.id}/push-folia`, { method: "POST" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        foliaWebUrl?: string;
+      };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `请求失败（${res.status}）`);
+      setPushSuccess(true);
+      if (data.foliaWebUrl) {
+        window.open(data.foliaWebUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (e) {
+      setPushError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPushBusy(false);
+    }
   }
 
   const variants = song.variants ?? [];
@@ -328,8 +351,24 @@ export function SongDetailClient({
             >
               <Copy className="h-3.5 w-3.5" /> Reuse Prompt
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={song.status !== "done" || pushBusy}
+              title="推送到 Folia Stage 并打开"
+              onClick={() => void pushToFolia()}
+            >
+              {pushBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ExternalLink className="h-3.5 w-3.5" />
+              )}
+              推送并打开 Folia
+            </Button>
           </div>
           {iterError && <p className="text-sm text-destructive">{iterError}</p>}
+          {pushError && <p className="text-sm text-destructive">{pushError}</p>}
+          {pushSuccess && <p className="text-sm text-emerald-600">已推送，Folia 窗口已打开</p>}
           {song.lyrics && (
             <div className="mt-8 border-t pt-4">
               <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -354,7 +393,7 @@ export function SongDetailClient({
           )}
 
           {/* 版本树 */}
-          {(parent || children.length > 0) && (
+          {(parent || childVersions.length > 0) && (
             <div className="mt-8 border-t pt-4">
               <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <GitBranch className="h-4 w-4" /> 版本树
@@ -378,9 +417,9 @@ export function SongDetailClient({
                     </div>
                   </div>
                 )}
-                {children.length > 0 && (
+                {childVersions.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {children.map((c) => (
+                    {childVersions.map((c) => (
                       <SongCard
                         key={c.id}
                         song={{

@@ -114,11 +114,3 @@ export function paramsSummary(p: PanelParams): string {
 export function hasParams(p: PanelParams): boolean {
   return Boolean(p.genre || p.mood || p.vocal);
 }
-
-/** 面板值 → 中文标签（服务端与客户端共用词表时的辅助，保留以防后续需要） */
-export function panelLabel(value: string): string | null {
-  const opt = PANEL_GROUPS.flatMap((g) => g.options).find(
-    (o) => `${o.label}(${o.tag})` === value,
-  );
-  return opt ? opt.label : null;
-}

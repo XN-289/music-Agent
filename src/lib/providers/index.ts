@@ -1,6 +1,7 @@
 import type { SunoProvider } from './types';
 import { MockSunoProvider } from './mock';
 import { SunoApiProvider } from './sunoapi';
+import { MusicProxyProvider } from './musicproxy';
 
 // Provider 注册表：切换后端只改 SUNO_PROVIDER 环境变量，应用层零改动。
 //   SUNO_PROVIDER=mock    本地合成演示（P0 默认）
@@ -8,6 +9,7 @@ import { SunoApiProvider } from './sunoapi';
 const providers = new Map<string, SunoProvider>([
   ['mock', new MockSunoProvider()],
   ['sunoapi', new SunoApiProvider()],
+  ['musicproxy', new MusicProxyProvider()],
 ]);
 
 export function getProvider(id?: string): SunoProvider {

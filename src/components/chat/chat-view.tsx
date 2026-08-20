@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -126,6 +126,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
   const [error, setError] = useState<string | null>(null);
   const [refAudio, setRefAudio] = useState("");
   const [showRef, setShowRef] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [params, setParams] = useState<PanelParams>({});
   const [showParams, setShowParams] = useState(false);
   const [credits, setCredits] = useState<{
@@ -370,6 +371,29 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
 
   function onCancel() {
     abortRef.current?.abort();
+  }
+
+  // 参考音频上传：本地文件 → /api/upload-audio（provider 托管）→ 公开 URL 填入参考音频
+  const refFileInputRef = useRef<HTMLInputElement>(null);
+  async function onPickRefFile(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // 允许重复选同一个文件
+    if (!f) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch("/api/upload-audio", { method: "POST", body: fd });
+      const d = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !d.url) throw new Error(d.error ?? "上传失败");
+      setRefAudio(d.url);
+      setShowRef(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
   }
 
   function newChat() {
@@ -621,13 +645,30 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
                 </div>
               )}
               {showRef && (
-                <input
-                  type="url"
-                  value={refAudio}
-                  onChange={(e) => setRefAudio(e.target.value)}
-                  placeholder="粘贴参考音频 URL（按它的风格/听感创作，可选）"
-                  className="mt-1.5 h-8 w-full rounded-md border border-input bg-transparent px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                />
+                <div className="mt-1.5 flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={refAudio}
+                    onChange={(e) => setRefAudio(e.target.value)}
+                    placeholder="粘贴参考音频 URL（按它的风格/听感创作，可选）"
+                    className="h-8 flex-1 rounded-md border border-input bg-transparent px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => refFileInputRef.current?.click()}
+                    className="h-8 shrink-0 rounded-md border px-2.5 text-xs transition-colors hover:border-primary hover:text-foreground disabled:opacity-50"
+                  >
+                    {uploading ? "上传中…" : "📎 上传文件"}
+                  </button>
+                  <input
+                    ref={refFileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => void onPickRefFile(e)}
+                  />
+                </div>
               )}
             </div>
           </div>

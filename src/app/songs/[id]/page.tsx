@@ -62,7 +62,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
       jobId={job?.id ?? null}
       lrc={lrc}
       parent={parent ? toSongDetailData(parent) : null}
-      children={children.map(toSongDetailData)}
+      childVersions={children.map(toSongDetailData)}
     />
   );
 }

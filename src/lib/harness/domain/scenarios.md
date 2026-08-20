@@ -21,7 +21,7 @@
 | 婚礼 | romantic ballad / R&B, soulful | 主副歌一唱一和感 | 新人对彼此说过的具体话；避免空泛誓言 |
 | 毕业 | nostalgic pop / campus folk, bittersweet | 合唱副歌 | 「那年夏天」的具体细节（教室/操场/食堂） |
 | 新年/春节 | festive pop / 国风喜庆（见国风知识） | 副歌祝福语收束 | 团聚细节、烟火、饺子 |
-| 短视频 BGM | 按情绪选曲风，Hook 前置 | **15-60 秒结构**（见下），前 3 秒出钩子 | 金句先行；副歌第一句独立成金句 |
+| 短视频 BGM | 按情绪选曲风，Hook 前置 | **15-60 秒结构**（见下），前 3 秒出钩子 | 金句先行；副歌第一句独立成金句。**生成前必须确认视频内容或情绪基调**（BGM 用途不决定听感，不知道内容就生成=瞎猜烧钱） |
 | Vlog/日常配乐 | lo-fi, chill / acoustic, instrumental | instrumental 优先 | 无词或轻哼 |
 | 游戏集锦/直播 | EDM, energetic / rock / trap | 高能量 drop 段 | 口号式短句，重复感 |
 | 运动/跑步 | electronic / rock, energetic | 鼓点驱动，节奏段落化 | 短句、重复；节拍感 |

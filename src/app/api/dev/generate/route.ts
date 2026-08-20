@@ -24,6 +24,8 @@ export async function POST(req: Request) {
     styleTags?: string[];
     prompt?: string;
     instrumental?: boolean;
+    model?: string;
+    duration?: number;
   } | null;
 
   if (!body?.title || !body?.lyrics) {
@@ -36,6 +38,8 @@ export async function POST(req: Request) {
     styleTags: Array.isArray(body.styleTags) ? body.styleTags : ['demo'],
     prompt: body.prompt,
     instrumental: body.instrumental ?? false,
+    model: body.model,
+    duration: body.duration,
   });
 
   return Response.json({ jobId, songId });

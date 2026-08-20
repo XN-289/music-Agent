@@ -54,11 +54,7 @@ export const PANEL_GROUPS = [
 
 export type PanelKey = (typeof PANEL_GROUPS)[number]["key"];
 
-/** 合法值全集（「标签(tag)」精确串），服务端白名单 */
-export const PANEL_VALUES: ReadonlySet<string> = new Set(
-  PANEL_GROUPS.flatMap((g) => g.options.map((o) => `${o.label}(${o.tag})`)),
-);
-
+/** 值是否命中词表（服务端白名单：精确匹配，杜绝任意字符进提示词数据块） */
 export function panelValueOf(key: PanelKey, value: string): boolean {
   return PANEL_GROUPS.some(
     (g) => g.key === key && g.options.some((o) => `${o.label}(${o.tag})` === value),

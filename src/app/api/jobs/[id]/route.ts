@@ -3,6 +3,7 @@ import { db, schema } from '@/lib/db';
 import { getProvider } from '@/lib/providers';
 import { makeLrc, parseLyricLines, type LyricsLine } from '@/lib/audio/lrc';
 import { checkRateLimit, clientIp } from '@/lib/rate-limit';
+import { queueAutoDelivery } from '@/lib/song-delivery';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             .where(
               and(eq(schema.songs.id, jobRow.songId), eq(schema.songs.status, 'processing')),
             );
+
+          // 自动交付只在生成完成时触发一次，避免阻塞 job 轮询响应。
+          queueAutoDelivery(jobRow.songId);
         }
       }
     } else if (job.status === 'failed') {
