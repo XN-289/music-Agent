@@ -8,6 +8,7 @@ import { GenerationCard } from "./generation-card";
 import { AssistantMessageText } from "./direction-options";
 import { ParamsPanel, hasParams, paramsSummary, type PanelParams } from "./params-panel";
 import { SongCard, type SongCardData } from "@/components/song/song-card";
+import { coverGradient } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 
 // 场景入口：来自 harness 场景库（对标海绵「精选/创作」+ Suno 快捷入口结构）
@@ -408,12 +409,14 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
       </div>
 
       {isFirst && (
-        <div className="mt-10">
-          <h1 className="text-center text-3xl font-semibold tracking-tight">想做什么歌？</h1>
+        <div className="mt-12">
+          <h1 className="text-center text-4xl font-bold tracking-tight">
+            想做什么<span className="text-primary">歌</span>？
+          </h1>
 
           {/* hero 输入框（Suno 文本主导：输入即主角） */}
-          <div className="mx-auto mt-6 max-w-xl">
-            <div className="rounded-lg border bg-card p-3">
+          <div className="mx-auto mt-8 max-w-2xl">
+            <div className="rounded-xl border bg-card p-4 shadow-sm transition-shadow focus-within:border-primary/50 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -432,7 +435,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
                 <span className="text-xs text-muted-foreground">Enter 发送 · Shift+Enter 换行</span>
                 <Button
                   type="button"
-                  size="sm"
+                  size="lg"
                   disabled={!input.trim() || sending}
                   onClick={() => {
                     const t = input.trim();
@@ -448,9 +451,9 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           </div>
 
           {/* 场景入口（对标海绵精选页结构） */}
-          <div className="mt-12">
-            <p className="text-sm text-muted-foreground">场景</p>
-            <div className="mt-3 grid grid-cols-4 gap-3">
+          <div className="mt-14">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground">场景</p>
+            <div className="mt-4 grid grid-cols-4 gap-3">
               {SCENARIO_CARDS.map((c) => (
                 <button
                   key={c.label}
@@ -458,7 +461,9 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
                   onClick={() => setInput(c.label)}
                   className="group flex flex-col items-start gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary"
                 >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-lg transition-transform group-hover:scale-105">
+                  <span
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${coverGradient(c.label)} text-lg transition-transform group-hover:scale-105`}
+                  >
                     {c.emoji}
                   </span>
                   <span className="text-sm">{c.label}</span>
@@ -468,18 +473,18 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           </div>
 
           {/* 自定义参数面板（对标海绵「自定义创作」：曲风/心情/音色直接选，不必打字描述） */}
-          <div className="mt-12">
-            <p className="text-sm text-muted-foreground">自定义</p>
-            <div className="mt-3">
+          <div className="mt-14">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground">自定义</p>
+            <div className="mt-4">
               <ParamsPanel value={params} onChange={setParams} />
             </div>
           </div>
 
           {/* 精选（对标海绵「精选 AI 音乐」/ musicmake Sample Works） */}
           {recentSongs && recentSongs.length > 0 && (
-            <div className="mt-12">
-              <p className="text-sm text-muted-foreground">精选</p>
-              <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
+            <div className="mt-14">
+              <p className="text-xs font-medium tracking-widest text-muted-foreground">精选</p>
+              <div className="-mx-4 mt-4 flex gap-3 overflow-x-auto px-4 pb-2">
                 {recentSongs.map((s) => (
                   <div key={s.id} className="w-40 shrink-0">
                     <SongCard song={s} />

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePlayerStore } from "@/components/player/player-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { coverGradient } from "@/lib/cover";
 import { Music2, Pause, Play } from "lucide-react";
 
 export interface SongCardData {
@@ -14,22 +15,6 @@ export interface SongCardData {
   progress: number;
   variants: { id: string; audioUrl: string; title: string; durationSec: number }[] | null;
   createdAt: number;
-}
-
-// 封面渐变：专辑封面是界面上唯一的色彩来源（设计系统），按标题散列取色
-const COVER_GRADIENTS = [
-  "from-emerald-500/70 to-teal-700/60",
-  "from-amber-500/70 to-orange-700/60",
-  "from-rose-500/70 to-red-700/60",
-  "from-sky-500/70 to-blue-700/60",
-  "from-lime-500/70 to-emerald-700/60",
-  "from-cyan-500/70 to-sky-700/60",
-];
-
-function coverGradient(title: string): string {
-  let h = 0;
-  for (const c of title) h = (h * 31 + c.codePointAt(0)!) % 997;
-  return COVER_GRADIENTS[h % COVER_GRADIENTS.length];
 }
 
 export function SongCard({ song }: { song: SongCardData }) {
