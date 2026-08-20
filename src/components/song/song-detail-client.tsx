@@ -65,6 +65,7 @@ export function SongDetailClient({
   const [replaceStart, setReplaceStart] = useState("");
   const [replaceEnd, setReplaceEnd] = useState("");
   const [iterError, setIterError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // 实时进度（M3）：轮询过程中用本地状态刷新进度条，服务端 props 只在终态时刷新
   const [live, setLive] = useState<{ progress: number; stage: string } | null>(null);
@@ -331,7 +332,21 @@ export function SongDetailClient({
           {iterError && <p className="text-sm text-destructive">{iterError}</p>}
           {song.lyrics && (
             <div>
-              <h2 className="mb-2 text-sm font-medium text-muted-foreground">歌词</h2>
+              <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                歌词
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(song.lyrics ?? "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                  {copied ? "已复制" : "复制"}
+                </Button>
+              </h2>
               <p className="whitespace-pre-wrap break-words border-t pt-3 text-sm leading-relaxed">
                 {song.lyrics}
               </p>

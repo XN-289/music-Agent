@@ -9,17 +9,18 @@ import { AssistantMessageText } from "./direction-options";
 import { SongCard, type SongCardData } from "@/components/song/song-card";
 import { cn } from "@/lib/utils";
 
-// 场景 chips 来自 harness 场景库：新手想的是场景不是风格
-const SCENARIO_CHIPS = [
-  "💔 分手纪念",
-  "🌙 深夜一个人听",
-  "🎁 生日祝福",
-  "📱 短视频 BGM",
-  "🚗 开车旅行",
-  "🎓 毕业季",
-  "🧧 新年祝福",
-  "📖 学习专注",
+// 场景入口：来自 harness 场景库（对标海绵「精选/创作」+ Suno 快捷入口结构）
+const SCENARIO_CARDS = [
+  { emoji: "💔", label: "分手纪念" },
+  { emoji: "🌙", label: "深夜一个人听" },
+  { emoji: "🎁", label: "生日祝福" },
+  { emoji: "📱", label: "短视频 BGM" },
+  { emoji: "🚗", label: "开车旅行" },
+  { emoji: "🎓", label: "毕业季" },
+  { emoji: "🧧", label: "新年祝福" },
+  { emoji: "📖", label: "学习专注" },
 ];
+const STYLE_PILLS = ["流行", "民谣", "说唱", "国风", "电子", "摇滚", "R&B", "抒情"];
 const CHAT_KEY = "music-agent-chat-id";
 
 interface ToolMsg {
@@ -377,26 +378,91 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
       </div>
 
       {isFirst && (
-        <div className="mb-10 mt-8 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">想做什么歌？</h1>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {SCENARIO_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setInput(chip.replace(/^\S+\s/, ""))}
-                className="rounded-full border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-              >
-                {chip}
-              </button>
-            ))}
+        <div className="mt-10">
+          <h1 className="text-center text-3xl font-semibold tracking-tight">想做什么歌？</h1>
+
+          {/* hero 输入框（Suno 文本主导：输入即主角） */}
+          <div className="mx-auto mt-6 max-w-xl">
+            <div className="rounded-lg border bg-card p-3">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="例如：一首送给妈妈的歌 / 深夜 emo 说唱 / 给毕业写首歌"
+                rows={2}
+                autoFocus
+                className="resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    onSubmit(e);
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between px-2 pb-1">
+                <span className="text-xs text-muted-foreground">Enter 发送 · Shift+Enter 换行</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!input.trim() || sending}
+                  onClick={() => {
+                    const t = input.trim();
+                    if (!t || sending) return;
+                    setInput("");
+                    void sendPrompt(t);
+                  }}
+                >
+                  {sending ? "生成中…" : "生成"}
+                </Button>
+              </div>
+            </div>
           </div>
+
+          {/* 场景入口（对标海绵精选页结构） */}
+          <div className="mt-10">
+            <p className="text-sm text-muted-foreground">场景</p>
+            <div className="mt-3 grid grid-cols-4 gap-3">
+              {SCENARIO_CARDS.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  onClick={() => setInput(c.label)}
+                  className="group flex flex-col items-start gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-lg transition-transform group-hover:scale-105">
+                    {c.emoji}
+                  </span>
+                  <span className="text-sm">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 风格快捷（海绵自定义创作的曲风选择） */}
+          <div className="mt-8">
+            <p className="text-sm text-muted-foreground">风格</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {STYLE_PILLS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setInput(`一首${s}的歌`)}
+                  className="rounded-full border px-3 py-1 text-sm transition-colors hover:border-primary hover:text-foreground"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 精选（对标海绵「精选 AI 音乐」/ musicmake Sample Works） */}
           {recentSongs && recentSongs.length > 0 && (
-            <div className="mt-10 text-left">
-              <p className="text-sm text-muted-foreground">最近的作品</p>
-              <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-8">
+              <p className="text-sm text-muted-foreground">精选</p>
+              <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
                 {recentSongs.map((s) => (
-                  <SongCard key={s.id} song={s} />
+                  <div key={s.id} className="w-40 shrink-0">
+                    <SongCard song={s} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -462,21 +528,22 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="sticky bottom-2 mt-6 space-y-3">
-        <div className="rounded-2xl border bg-card p-3 shadow-lg">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="描述你想创作的歌，例如：一首关于夏夜散步的 dreamy pop，女生唱的，带一点复古合成器…"
-            rows={2}
-            className="resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                onSubmit(e);
-              }
-            }}
-          />
+      {!isFirst && (
+        <form onSubmit={onSubmit} className="sticky bottom-2 mt-6 space-y-3">
+          <div className="rounded-lg border bg-card p-3">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="描述你想创作的歌，例如：一首关于夏夜散步的 dreamy pop，女生唱的，带一点复古合成器…"
+              rows={2}
+              className="resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  onSubmit(e);
+                }
+              }}
+            />
           <div className="flex items-center justify-between px-2 pb-1">
             <span className="text-xs text-muted-foreground">Enter 发送 · Shift+Enter 换行</span>
             {sending ? (
@@ -489,26 +556,27 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
               </Button>
             )}
           </div>
-          <div className="border-t border-border/60 px-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setShowRef((v) => !v)}
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              🎵 参考音频 {showRef ? "▲" : "▼"}
-            </button>
-            {showRef && (
-              <input
-                type="url"
-                value={refAudio}
-                onChange={(e) => setRefAudio(e.target.value)}
-                placeholder="粘贴参考音频 URL（按它的风格/听感创作，可选）"
-                className="mt-1.5 h-8 w-full rounded-md border border-input bg-transparent px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            )}
+            <div className="border-t border-border/60 px-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRef((v) => !v)}
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                🎵 参考音频 {showRef ? "▲" : "▼"}
+              </button>
+              {showRef && (
+                <input
+                  type="url"
+                  value={refAudio}
+                  onChange={(e) => setRefAudio(e.target.value)}
+                  placeholder="粘贴参考音频 URL（按它的风格/听感创作，可选）"
+                  className="mt-1.5 h-8 w-full rounded-md border border-input bg-transparent px-3 text-xs text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              )}
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

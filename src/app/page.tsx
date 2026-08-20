@@ -13,7 +13,7 @@ export default async function HomePage() {
     .from(schema.songs)
     .where(eq(schema.songs.status, "done"))
     .orderBy(desc(schema.songs.createdAt))
-    .limit(3);
+    .limit(8);
 
   const recentSongs: SongCardData[] = recent.map((s) => ({
     id: s.id,
