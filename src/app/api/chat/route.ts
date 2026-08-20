@@ -37,10 +37,6 @@ export async function POST(req: Request) {
   if (!grl.ok) {
     return Response.json({ error: '服务繁忙，请稍后再试' }, { status: 429 });
   }
-  // 单会话串行：上一轮仍在生成时拒绝并发请求（防事件串流与重复扣费）
-  if (isPromptRunning()) {
-    return Response.json({ error: '上一条还在处理中，请等它完成后再发' }, { status: 409 });
-  }
 
   const body = (await req.json().catch(() => null)) as {
     text?: string;
@@ -54,6 +50,10 @@ export async function POST(req: Request) {
     return Response.json({ error: '输入过长（≤20000 字符）' }, { status: 400 });
   }
   const chatId = (body.chatId ?? 'default').slice(0, 64);
+  // 单 chat 串行：该 chat 上一轮仍在生成时拒绝并发请求（防事件串流与重复扣费）
+  if (isPromptRunning(chatId)) {
+    return Response.json({ error: '上一条还在处理中，请等它完成后再发' }, { status: 409 });
+  }
   const userText = body.text.trim();
 
   // 参考音频：注入给 LLM 的指令。URL 是不可信数据——只接受单行 http(s) URL，
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
       let assistantText = '';
       const toolsByCall = new Map<string, ToolRecord>();
 
-      const off = addSessionListener((ev) => {
+      const off = addSessionListener(chatId, (ev) => {
         switch (ev.type) {
           case 'message_update': {
             if ((ev.message as { role?: string }).role !== 'assistant') break;
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
       });
 
       try {
-        await queuePrompt(promptForLlm);
+        await queuePrompt(chatId, promptForLlm);
         // 助手消息持久化（文本 + 工具卡片）
         await db.insert(schema.messages).values({
           id: crypto.randomUUID(),

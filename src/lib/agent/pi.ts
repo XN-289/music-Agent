@@ -9,6 +9,7 @@
 //      —— 运行时生成 models.json 注册 'relay' provider（api: openai-completions）
 
 import { mkdir, writeFile } from 'node:fs/promises';
+import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import {
   DefaultResourceLoader,
@@ -270,15 +271,85 @@ const CUSTOM_TOOLS: ToolDefinition[] = [
   searchSongsToolDef,
 ];
 
-// ---------- 会话单例 ----------
+// ---------- 会话 per-chat 化 ----------
+// 每个 chatId 一个独立的 AgentSession（独立历史 + 独立系统提示词状态 + 独立事件路由），
+// 修掉「新对话还记着上一场的事」的串台问题（此前全部 chat 共享一个模块级单例）。
+// 会话历史由 pi SessionManager 持久化在 data/pi-agent/chats/<sha256(chatId)>/ 下，
+// 进程重启后按 chatId 重建 session 时自动恢复历史；内存 LRU（MAX_CHATS）驱逐只丢缓存不丢历史。
 
-let sessionPromise: Promise<AgentSession> | null = null;
+import crypto from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-function createSession(): Promise<AgentSession> {
+const MAX_CHATS = 10;
+
+interface ChatSessionEntry {
+  sessionPromise: Promise<AgentSession>;
+  chain: Promise<unknown>; // 该 chat 内 turn 串行化（pi followUp 不等待完成，并发会串流）
+  running: boolean;
+  listeners: Set<Listener>;
+  subscribed: boolean;
+  lastUsed: number;
+}
+
+const chatSessions = new Map<string, ChatSessionEntry>();
+
+/** chatId 是用户可控输入，不能直接当目录名——哈希防路径穿越 */
+function chatSessionDir(chatId: string): string {
+  const h = crypto.createHash('sha256').update(chatId).digest('hex').slice(0, 24);
+  return path.join(process.cwd(), 'data', 'pi-agent', 'chats', h);
+}
+
+/**
+ * 会话目录里最新的一条会话文件。pi 的 SessionManager.create() 每次都新建带时间戳的
+ * jsonl（不重开旧文件），所以恢复历史必须显式找到最新文件用 open() 打开。
+ */
+function findLatestSessionFile(dir: string): string | null {
+  let best: { path: string; mtimeMs: number } | null = null;
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.jsonl')) continue;
+    const p = path.join(dir, f);
+    const mtimeMs = statSync(p).mtimeMs;
+    if (!best || mtimeMs > best.mtimeMs) best = { path: p, mtimeMs };
+  }
+  return best?.path ?? null;
+}
+
+function getChatEntry(chatId: string): ChatSessionEntry {
+  const existing = chatSessions.get(chatId);
+  if (existing) {
+    existing.lastUsed = Date.now();
+    return existing;
+  }
+  if (chatSessions.size >= MAX_CHATS) {
+    let oldestKey: string | null = null;
+    let oldestTs = Infinity;
+    for (const [k, v] of chatSessions) {
+      if (v.lastUsed < oldestTs) {
+        oldestTs = v.lastUsed;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) chatSessions.delete(oldestKey);
+  }
+  const entry: ChatSessionEntry = {
+    sessionPromise: createSession(chatId),
+    chain: Promise.resolve(),
+    running: false,
+    listeners: new Set(),
+    subscribed: false,
+    lastUsed: Date.now(),
+  };
+  chatSessions.set(chatId, entry);
+  return entry;
+}
+
+function createSession(chatId: string): Promise<AgentSession> {
   const cwd = process.cwd();
   const agentDir = path.join(cwd, 'data', 'pi-agent');
+  const sessionDir = chatSessionDir(chatId);
 
   return (async () => {
+    await mkdir(sessionDir, { recursive: true });
     // 中转站模式：LLM_BASE_URL 存在 → 运行时生成 models.json 注册 'relay' provider
     let modelsPath: string | null = null;
     let providerId = process.env.LLM_PROVIDER ?? 'deepseek';
@@ -343,6 +414,11 @@ function createSession(): Promise<AgentSession> {
     });
     await resourceLoader.reload({});
 
+    const existingSessionFile = findLatestSessionFile(sessionDir);
+    const sessionManager = existingSessionFile
+      ? SessionManager.open(existingSessionFile, sessionDir, cwd) // 恢复该 chat 的历史
+      : SessionManager.create(cwd, sessionDir);
+
     const { session } = await createAgentSession({
       cwd,
       modelRuntime,
@@ -351,89 +427,79 @@ function createSession(): Promise<AgentSession> {
       noTools: 'builtin', // 禁用 read/bash/edit/write 编码工具，仅保留自定义工具
       customTools: CUSTOM_TOOLS,
       resourceLoader,
-      sessionManager: SessionManager.create(cwd),
+      sessionManager,
     });
 
     return session;
   })();
 }
 
-export function getPiSession(): Promise<AgentSession> {
-  if (!sessionPromise) {
-    sessionPromise = createSession();
-    // 创建失败后重置缓存（连同事件订阅标记），下次请求重试
-    sessionPromise.catch(() => {
-      sessionPromise = null;
-      subscribed = false;
-    });
-  }
-  return sessionPromise;
-}
-
-// ---------- 提示词串行化 ----------
-// pi 的 followUp 队列不会等待处理完成（prompt() 立即返回），且会话事件经全局 hub 广播，
-// 并发请求会造成事件串流与消息丢失。单会话场景下用 promise 链串行化：
-// 同一时刻只有一个 prompt 在跑，事件与当前请求一一对应。
-
-let promptChain: Promise<unknown> = Promise.resolve();
-let promptRunning = false;
-let turnPaidCalls = 0;
+// ---------- 提示词串行化（per-chat） ----------
+// pi 的 followUp 队列不会等待处理完成（prompt() 立即返回），同一 chat 并发请求会造成
+// 事件串流与消息丢失，所以每个 chat 内部用 promise 链串行化；不同 chat 互不阻塞。
 
 export const MAX_PAID_CALLS_PER_TURN = 3;
 
-/** 当前是否有一个 turn 正在运行（并发请求直接 409，防止事件串流与重复扣费） */
-export function isPromptRunning(): boolean {
-  return promptRunning;
+// 付费调用预算：用 AsyncLocalStorage 绑定到「当前 turn」（并发 chat 各算各的）；
+// 万一 ALS 上下文丢失（工具在 pi 内部脱离 prompt 链执行），回落到全局共享计数器兜底。
+const budgetAls = new AsyncLocalStorage<{ calls: number }>();
+const globalBudget = { calls: 0 };
+
+/** 当前 chat 是否有一个 turn 正在运行（并发请求直接 409，防止事件串流与重复扣费） */
+export function isPromptRunning(chatId: string): boolean {
+  return chatSessions.get(chatId)?.running ?? false;
 }
 
 /** 付费工具调用预算：一次用户 turn 最多 N 次真实生成（防提示词注入批量烧钱） */
 export function spendPaidCallBudget(): void {
-  turnPaidCalls += 1;
-  if (turnPaidCalls > MAX_PAID_CALLS_PER_TURN) {
+  const counter = budgetAls.getStore() ?? globalBudget;
+  counter.calls += 1;
+  if (counter.calls > MAX_PAID_CALLS_PER_TURN) {
     throw new Error(
       `本轮已触发 ${MAX_PAID_CALLS_PER_TURN} 次生成/迭代，超过上限。如需更多请让用户在新一轮明确确认。`,
     );
   }
 }
 
-export async function queuePrompt(text: string): Promise<void> {
-  const run = promptChain.then(async () => {
-    promptRunning = true;
-    turnPaidCalls = 0;
+export async function queuePrompt(chatId: string, text: string): Promise<void> {
+  const entry = getChatEntry(chatId);
+  const run = entry.chain.then(async () => {
+    entry.running = true;
+    globalBudget.calls = 0; // 兜底计数器的重置（ALS 正常时每个 turn 有自己的 store）
     try {
-      const session = await getPiSession();
-      await session.prompt(text, { streamingBehavior: 'followUp' });
+      const session = await entry.sessionPromise;
+      await budgetAls.run({ calls: 0 }, () =>
+        session.prompt(text, { streamingBehavior: 'followUp' }),
+      );
     } finally {
-      promptRunning = false;
+      entry.running = false;
     }
   });
   // 无论成败都让链条继续，但把错误抛给调用方
-  promptChain = run.catch(() => {});
+  entry.chain = run.catch(() => {});
   return run;
 }
 
-// ---------- 事件广播（session 级订阅 → 所有 SSE 连接） ----------
+// ---------- 事件广播（per-chat：会话事件只路由给该 chat 的 SSE 连接） ----------
 
 type SessionEvent = AgentSessionEvent;
 type Listener = (event: SessionEvent) => void;
 
-const listeners = new Set<Listener>();
-let subscribed = false;
-
-async function ensureSubscription() {
-  if (subscribed) return;
-  const session = await getPiSession();
+async function ensureSubscription(entry: ChatSessionEntry) {
+  if (entry.subscribed) return;
+  const session = await entry.sessionPromise;
   session.subscribe((event) => {
-    for (const cb of listeners) cb(event);
+    for (const cb of entry.listeners) cb(event);
   });
-  subscribed = true; // 订阅成功后才置位，失败时下次 addSessionListener 会重试
+  entry.subscribed = true; // 订阅成功后才置位，失败时下次 addSessionListener 会重试
 }
 
-export function addSessionListener(cb: Listener): () => void {
-  listeners.add(cb);
-  void ensureSubscription();
+export function addSessionListener(chatId: string, cb: Listener): () => void {
+  const entry = getChatEntry(chatId);
+  entry.listeners.add(cb);
+  void ensureSubscription(entry);
   return () => {
-    listeners.delete(cb);
+    entry.listeners.delete(cb);
   };
 }
 
