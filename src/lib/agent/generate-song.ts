@@ -143,6 +143,32 @@ export async function resolveSongForIteration(songId: string) {
 export async function getSongForAgent(songId: string) {
   const song = (await db.select().from(schema.songs).where(eq(schema.songs.id, songId)))[0];
   if (!song) return null;
+  // inspect 时同步任务状态：failed 任务的行可能还没被曲库页 sweep 同步（sweep 进程内只跑一次），
+  // 会导致 Agent 看到 stale 的「processing」而无法启动自动修复（自动修复链路实测抓出）。
+  if (song.status === 'processing') {
+    try {
+      const job = (
+        await db
+          .select()
+          .from(schema.generationJobs)
+          .where(eq(schema.generationJobs.songId, song.id))
+      )[0];
+      if (job) {
+        const memJob = await getProvider().getJob(job.id);
+        if (memJob.status === 'failed') {
+          const error = memJob.error ?? '生成失败';
+          await db
+            .update(schema.songs)
+            .set({ status: 'failed', error, updatedAt: new Date() })
+            .where(eq(schema.songs.id, song.id));
+          song.status = 'failed';
+          song.error = error;
+        }
+      }
+    } catch {
+      // 同步失败不影响 inspect 主流程
+    }
+  }
   return {
     id: song.id,
     title: song.title,
