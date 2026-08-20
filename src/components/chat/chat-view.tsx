@@ -448,7 +448,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           </div>
 
           {/* 场景入口（对标海绵精选页结构） */}
-          <div className="mt-10">
+          <div className="mt-12">
             <p className="text-sm text-muted-foreground">场景</p>
             <div className="mt-3 grid grid-cols-4 gap-3">
               {SCENARIO_CARDS.map((c) => (
@@ -468,7 +468,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           </div>
 
           {/* 自定义参数面板（对标海绵「自定义创作」：曲风/心情/音色直接选，不必打字描述） */}
-          <div className="mt-8">
+          <div className="mt-12">
             <p className="text-sm text-muted-foreground">自定义</p>
             <div className="mt-3">
               <ParamsPanel value={params} onChange={setParams} />
@@ -477,7 +477,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
 
           {/* 精选（对标海绵「精选 AI 音乐」/ musicmake Sample Works） */}
           {recentSongs && recentSongs.length > 0 && (
-            <div className="mt-8">
+            <div className="mt-12">
               <p className="text-sm text-muted-foreground">精选</p>
               <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
                 {recentSongs.map((s) => (

@@ -16,6 +16,9 @@ export function LibraryClient({ songs }: { songs: SongCardData[] }) {
     return [...set].sort();
   }, [songs]);
 
+  const [showAllTags, setShowAllTags] = useState(false);
+  const visibleTags = showAllTags ? allTags : allTags.slice(0, 6);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return songs.filter((s) => {
@@ -34,7 +37,7 @@ export function LibraryClient({ songs }: { songs: SongCardData[] }) {
           placeholder="搜索歌名或风格"
           className="h-8 w-56"
         />
-        {allTags.slice(0, 12).map((t) => (
+        {visibleTags.map((t) => (
           <button
             key={t}
             type="button"
@@ -48,6 +51,15 @@ export function LibraryClient({ songs }: { songs: SongCardData[] }) {
             {t}
           </button>
         ))}
+        {allTags.length > 6 && (
+          <button
+            type="button"
+            onClick={() => setShowAllTags((v) => !v)}
+            className="text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+          >
+            {showAllTags ? "收起" : `更多 ${allTags.length - 6}`}
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (

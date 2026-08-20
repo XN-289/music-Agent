@@ -51,7 +51,7 @@ function PillGroup({
               aria-pressed={active}
               onClick={() => onPick(active ? undefined : toParam(o))}
               className={cn(
-                "rounded-full border px-3 py-1 text-sm transition-colors",
+                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                 active
                   ? "border-primary bg-primary/10 text-primary"
                   : "hover:border-primary hover:text-foreground",
@@ -75,7 +75,7 @@ export function ParamsPanel({
 }) {
   const hasAny = Boolean(value.genre || value.mood || value.vocal);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-6 md:grid-cols-3">
       {GROUPS.map((g) => (
         <PillGroup
           key={g.title}
@@ -94,7 +94,7 @@ export function ParamsPanel({
         <button
           type="button"
           onClick={() => onChange({})}
-          className="w-fit text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+          className="w-fit text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline md:col-span-3"
         >
           清空参数
         </button>

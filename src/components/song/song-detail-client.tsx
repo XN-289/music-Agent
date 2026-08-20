@@ -331,7 +331,7 @@ export function SongDetailClient({
           </div>
           {iterError && <p className="text-sm text-destructive">{iterError}</p>}
           {song.lyrics && (
-            <div>
+            <div className="mt-8 border-t pt-4">
               <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 歌词
                 <Button
@@ -347,7 +347,7 @@ export function SongDetailClient({
                   {copied ? "已复制" : "复制"}
                 </Button>
               </h2>
-              <p className="whitespace-pre-wrap break-words border-t pt-3 text-sm leading-relaxed">
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                 {song.lyrics}
               </p>
             </div>
@@ -355,7 +355,7 @@ export function SongDetailClient({
 
           {/* 版本树 */}
           {(parent || children.length > 0) && (
-            <div>
+            <div className="mt-8 border-t pt-4">
               <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <GitBranch className="h-4 w-4" /> 版本树
               </h2>
