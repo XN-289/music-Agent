@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .limit(200);
 
   const messages = rows.map((row) => {
-    let parsed: { text?: string; tools?: unknown[] } = {};
+    let parsed: { text?: string; params?: unknown; tools?: unknown[] } = {};
     try {
       parsed = JSON.parse(row.content);
     } catch {
@@ -25,6 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       id: row.id,
       role: row.role,
       text: parsed.text ?? '',
+      params: parsed.params,
       tools: parsed.tools ?? [],
     };
   });

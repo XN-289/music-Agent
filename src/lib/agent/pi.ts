@@ -48,6 +48,8 @@ const generateMusicToolDef = defineTool({
     }),
     styleTags: Type.Array(Type.String(), {
       description: '2-6 个 Suno 风格标签，如 "dreamy pop"、"female vocals"',
+      minItems: 2,
+      maxItems: 6,
     }),
     prompt: Type.Optional(Type.String({ description: '一句话风格描述' })),
     instrumental: Type.Optional(Type.Boolean({ default: false, description: '是否纯音乐' })),

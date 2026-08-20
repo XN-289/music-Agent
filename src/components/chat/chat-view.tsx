@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { GenerationCard } from "./generation-card";
 import { AssistantMessageText } from "./direction-options";
+import { ParamsPanel, hasParams, paramsSummary, type PanelParams } from "./params-panel";
 import { SongCard, type SongCardData } from "@/components/song/song-card";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,6 @@ const SCENARIO_CARDS = [
   { emoji: "🧧", label: "新年祝福" },
   { emoji: "📖", label: "学习专注" },
 ];
-const STYLE_PILLS = ["流行", "民谣", "说唱", "国风", "电子", "摇滚", "R&B", "抒情"];
 const CHAT_KEY = "music-agent-chat-id";
 
 interface ToolMsg {
@@ -37,6 +37,7 @@ interface ChatMsg {
   role: "user" | "assistant";
   text: string;
   tool?: ToolMsg;
+  params?: PanelParams; // 该条消息携带的面板参数（展示用，服务端持久化 text 不变）
   done: boolean;
 }
 
@@ -49,11 +50,12 @@ async function streamChat(
   signal: AbortSignal,
   onActivity: () => void,
   referenceAudioUrl?: string,
+  params?: PanelParams,
 ): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, chatId, referenceAudioUrl }),
+    body: JSON.stringify({ text, chatId, referenceAudioUrl, params }),
     signal,
   });
   if (!res.ok) {
@@ -106,6 +108,7 @@ interface HistoryRow {
   id: string;
   role: "user" | "assistant";
   text: string;
+  params?: PanelParams;
   tools?: Array<{
     toolName?: string;
     title?: string;
@@ -116,13 +119,14 @@ interface HistoryRow {
 }
 
 export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
-  const [chatId, setChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refAudio, setRefAudio] = useState("");
   const [showRef, setShowRef] = useState(false);
+  const [params, setParams] = useState<PanelParams>({});
+  const [showParams, setShowParams] = useState(false);
   const [credits, setCredits] = useState<{
     unlimited?: boolean;
     todayCount?: number;
@@ -131,7 +135,9 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
 
   const idRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const lastPromptRef = useRef("");
+  const [lastPrompt, setLastPrompt] = useState(""); // 重试按钮需要渲染期读取（ref 不参与渲染）
+  // 最近一次发送的完整快照（text + 面板参数 + 参考音频），重试时整包复用保证幂等
+  const lastSendRef = useRef<{ text: string; params?: PanelParams; refAudio?: string } | null>(null);
   const lastActivityRef = useRef(0);
   const reuseHandledRef = useRef(false);
   // 收到过增量流的消息 id：完整文本兜底（delta）不应覆盖已流式累积的文本
@@ -170,7 +176,6 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
       id = "default";
     }
     chatIdRef.current = id;
-    setChatId(id);
 
     // 历史恢复
     void fetch(`/api/chats/${id}/messages`)
@@ -182,6 +187,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
             id: m.id,
             role: m.role,
             text: m.text ?? "",
+            params: m.params,
             tool:
               m.tools && m.tools.length > 0
                 ? {
@@ -223,20 +229,38 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   };
 
-  async function sendPrompt(text: string) {
+  async function sendPrompt(
+    text: string,
+    opts?: { params?: PanelParams | null; refAudio?: string },
+  ) {
     if (!text.trim() || sending) return;
     setSending(true);
     setError(null);
-    lastPromptRef.current = text.trim();
+    setLastPrompt(text.trim());
 
-    const userMsg: ChatMsg = { id: `u${++idRef.current}`, role: "user", text: text.trim(), done: true };
+    // 参数快照：opts.params 显式传 null = 本条消息不带面板参数（如「就选②这个方向」，
+    // 方向选择本身就是裁决，避免与面板约束冲突导致气泡谎报）；undefined = 用当前面板值。
+    const paramsForSend: PanelParams = opts?.params === null ? {} : { ...(opts?.params ?? params) };
+    const refAudioForSend = opts?.refAudio ?? (refAudio.trim() || undefined);
+    // 记录完整发送快照，重试时整包复用（幂等：不混入重试时已变更的面板/参考音频）
+    lastSendRef.current = {
+      text: text.trim(),
+      params: hasParams(paramsForSend) ? paramsForSend : undefined,
+      refAudio: refAudioForSend,
+    };
+    const userMsg: ChatMsg = {
+      id: `u${++idRef.current}`,
+      role: "user",
+      text: text.trim(),
+      params: hasParams(paramsForSend) ? paramsForSend : undefined,
+      done: true,
+    };
     const assistantMsg: ChatMsg = { id: `a${++idRef.current}`, role: "assistant", text: "", done: false };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
     const controller = new AbortController();
     abortRef.current = controller;
     lastActivityRef.current = Date.now();
-    const refAudioForSend = refAudio.trim() || undefined;
 
     try {
       await streamChat(
@@ -316,6 +340,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           lastActivityRef.current = Date.now();
         },
         refAudioForSend,
+        hasParams(paramsForSend) ? paramsForSend : undefined,
       );
       patchMsg(assistantMsg.id, { done: true });
     } catch (e) {
@@ -354,10 +379,15 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
       // 忽略
     }
     chatIdRef.current = id;
-    setChatId(id);
     setMessages([]);
     setError(null);
     setInput("");
+    // 新对话 = 全新上下文：面板参数与参考音频都是消息级约束，不得跨会话泄漏
+    setParams({});
+    setShowParams(false);
+    setRefAudio("");
+    setShowRef(false);
+    lastSendRef.current = null;
   }
 
   const isFirst = messages.length === 0;
@@ -437,20 +467,11 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
             </div>
           </div>
 
-          {/* 风格快捷（海绵自定义创作的曲风选择） */}
+          {/* 自定义参数面板（对标海绵「自定义创作」：曲风/心情/音色直接选，不必打字描述） */}
           <div className="mt-8">
-            <p className="text-sm text-muted-foreground">风格</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {STYLE_PILLS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setInput(`一首${s}的歌`)}
-                  className="rounded-full border px-3 py-1 text-sm transition-colors hover:border-primary hover:text-foreground"
-                >
-                  {s}
-                </button>
-              ))}
+            <p className="text-sm text-muted-foreground">自定义</p>
+            <div className="mt-3">
+              <ParamsPanel value={params} onChange={setParams} />
             </div>
           </div>
 
@@ -482,7 +503,8 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
                   text={m.text}
                   disabled={sending}
                   onSelectOption={(opt) => {
-                    void sendPrompt(`就选「${opt.title}」这个方向`);
+                    // 方向选择是用户对方向的裁决，本条消息不带面板参数，避免两种约束冲突
+                    void sendPrompt(`就选「${opt.title}」这个方向`, { params: null });
                   }}
                 />
               ) : m.role === "assistant" ? (
@@ -493,6 +515,11 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
               ) : (
                 <div className="max-w-[85%] rounded-lg bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground">
                   <p className="whitespace-pre-wrap">{m.text}</p>
+                  {m.params && hasParams(m.params) && (
+                    <p className="mt-1.5 text-xs text-primary-foreground/70">
+                      🎛 {paramsSummary(m.params)}
+                    </p>
+                  )}
                 </div>
               ))}
             {m.tool && (
@@ -519,9 +546,13 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
             variant="ghost"
             size="sm"
             onClick={() => {
-                        void sendPrompt(lastPromptRef.current);
+              // 重试 = 原样重发：整包复用上次发送快照（text + 面板参数 + 参考音频）
+              const last = lastSendRef.current;
+              if (last) {
+                void sendPrompt(last.text, { params: last.params ?? null, refAudio: last.refAudio });
+              }
             }}
-            disabled={sending || !lastPromptRef.current}
+            disabled={sending || !lastPrompt}
           >
             重试
           </Button>
@@ -557,13 +588,33 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
             )}
           </div>
             <div className="border-t border-border/60 px-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRef((v) => !v)}
-                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                🎵 参考音频 {showRef ? "▲" : "▼"}
-              </button>
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => setShowParams((v) => !v)}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  🎛 参数
+                  {hasParams(params) && (
+                    <span className="ml-1.5 text-primary">· {paramsSummary(params)}</span>
+                  )}{" "}
+                  {showParams ? "▲" : "▼"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRef((v) => !v)}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  🎵 参考音频
+                  {refAudio.trim() && <span className="ml-1.5 text-primary">· 已加载</span>}{" "}
+                  {showRef ? "▲" : "▼"}
+                </button>
+              </div>
+              {showParams && (
+                <div className="mt-3">
+                  <ParamsPanel value={params} onChange={setParams} />
+                </div>
+              )}
               {showRef && (
                 <input
                   type="url"
