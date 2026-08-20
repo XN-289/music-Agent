@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Copy, Download, GitBranch, Layers, Loader2, Pause, Play, Scissors, Wand2 } from "lucide-react";
 
 export interface SongDetailData {
@@ -220,7 +220,7 @@ export function SongDetailClient({
       )}
 
       {active && (
-        <div className="mt-6 rounded-2xl border bg-card p-6">
+        <div className="mt-6">
           <div className="flex items-center gap-4">
             <Button
               size="icon"
@@ -241,9 +241,8 @@ export function SongDetailClient({
             </Button>
             <div>
               <p className="font-medium">{song.title}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs tabular-nums text-muted-foreground">
                 {Math.round(active.durationSec)}s
-                {song.status === "done" ? " · 可迭代（Extend / Cover）" : ""}
               </p>
             </div>
           </div>
@@ -333,7 +332,7 @@ export function SongDetailClient({
           {song.lyrics && (
             <div>
               <h2 className="mb-2 text-sm font-medium text-muted-foreground">歌词</h2>
-              <p className="whitespace-pre-wrap break-words rounded-xl border bg-muted/40 p-4 text-sm leading-relaxed">
+              <p className="whitespace-pre-wrap break-words border-t pt-3 text-sm leading-relaxed">
                 {song.lyrics}
               </p>
             </div>
@@ -398,118 +397,124 @@ export function SongDetailClient({
       </div>
 
       {/* Extend 对话框 */}
-      <Modal open={extendOpen} onClose={() => setExtendOpen(false)} title="延长歌曲">
-        <form onSubmit={onSubmitExtend} className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            从歌曲结尾向后延续（约再生成一段）。可选：描述新段落的内容走向。
-          </p>
-          <Textarea
-            value={extPrompt}
-            onChange={(e) => setExtPrompt(e.target.value)}
-            placeholder="例如：在结尾加一段安静的钢琴收束，渐弱结束"
-            rows={3}
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setExtendOpen(false)}>
-              取消
-            </Button>
-            <Button type="submit" size="sm" disabled={busy !== null}>
-              {busy === "extend" ? "生成中…" : "开始延长"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <Dialog open={extendOpen} onOpenChange={setExtendOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>延长歌曲</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onSubmitExtend} className="space-y-3">
+            <Textarea
+              value={extPrompt}
+              onChange={(e) => setExtPrompt(e.target.value)}
+              placeholder="例如：在结尾加一段安静的钢琴收束，渐弱结束"
+              rows={3}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setExtendOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" size="sm" disabled={busy !== null}>
+                {busy === "extend" ? "生成中…" : "开始延长"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Cover 对话框 */}
-      <Modal open={coverOpen} onClose={() => setCoverOpen(false)} title="翻唱 / 重混">
-        <form onSubmit={onSubmitCover} className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            保留歌曲内容，用新的风格重新演绎。可选：新风格描述与新标题。
-          </p>
-          <Textarea
-            value={coverPrompt}
-            onChange={(e) => setCoverPrompt(e.target.value)}
-            placeholder="例如：改成 lo-fi 慢板、女生气声演唱"
-            rows={2}
-          />
-          <Input
-            value={coverTitle}
-            onChange={(e) => setCoverTitle(e.target.value)}
-            placeholder="翻唱版标题（可选）"
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setCoverOpen(false)}>
-              取消
-            </Button>
-            <Button type="submit" size="sm" disabled={busy !== null}>
-              {busy === "cover" ? "生成中…" : "开始翻唱"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <Dialog open={coverOpen} onOpenChange={setCoverOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>翻唱 / 重混</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onSubmitCover} className="space-y-3">
+            <Textarea
+              value={coverPrompt}
+              onChange={(e) => setCoverPrompt(e.target.value)}
+              placeholder="例如：改成 lo-fi 慢板、女生气声演唱"
+              rows={2}
+            />
+            <Input
+              value={coverTitle}
+              onChange={(e) => setCoverTitle(e.target.value)}
+              placeholder="翻唱版标题（可选）"
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setCoverOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" size="sm" disabled={busy !== null}>
+                {busy === "cover" ? "生成中…" : "开始翻唱"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* 替换段落对话框 */}
-      <Modal open={replaceOpen} onClose={() => setReplaceOpen(false)} title="替换段落">
-        <form onSubmit={onSubmitReplace} className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            指定要替换的时间区间（秒），描述新的内容走向。播放到目标位置（点波形或歌词行跳转），再用「取当前」填入秒数。
-          </p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type="number"
-                value={replaceStart}
-                onChange={(e) => setReplaceStart(e.target.value)}
-                placeholder="起始秒，如 10"
-                min={0}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
-                onClick={() => setReplaceStart(String(Math.max(0, Math.round(progressSec))))}
-                title="取当前播放位置"
-              >
-                ⏱ 取当前
+      <Dialog open={replaceOpen} onOpenChange={setReplaceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>替换段落</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onSubmitReplace} className="space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type="number"
+                  value={replaceStart}
+                  onChange={(e) => setReplaceStart(e.target.value)}
+                  placeholder="起始秒，如 10"
+                  min={0}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
+                  onClick={() => setReplaceStart(String(Math.max(0, Math.round(progressSec))))}
+                  title="取当前播放位置"
+                >
+                  ⏱ 取当前
+                </Button>
+              </div>
+              <div className="relative flex-1">
+                <Input
+                  type="number"
+                  value={replaceEnd}
+                  onChange={(e) => setReplaceEnd(e.target.value)}
+                  placeholder="结束秒，如 20"
+                  min={1}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
+                  onClick={() => setReplaceEnd(String(Math.max(1, Math.round(progressSec))))}
+                  title="取当前播放位置"
+                >
+                  ⏱ 取当前
+                </Button>
+              </div>
+            </div>
+            <Textarea
+              value={replacePrompt}
+              onChange={(e) => setReplacePrompt(e.target.value)}
+              placeholder="例如：把这段改成更安静的钢琴段落"
+              rows={2}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setReplaceOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" size="sm" disabled={busy !== null}>
+                {busy === "replace" ? "生成中…" : "替换段落"}
               </Button>
             </div>
-            <div className="relative flex-1">
-              <Input
-                type="number"
-                value={replaceEnd}
-                onChange={(e) => setReplaceEnd(e.target.value)}
-                placeholder="结束秒，如 20"
-                min={1}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
-                onClick={() => setReplaceEnd(String(Math.max(1, Math.round(progressSec))))}
-                title="取当前播放位置"
-              >
-                ⏱ 取当前
-              </Button>
-            </div>
-          </div>
-          <Textarea
-            value={replacePrompt}
-            onChange={(e) => setReplacePrompt(e.target.value)}
-            placeholder="例如：把这段改成更安静的钢琴段落"
-            rows={2}
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setReplaceOpen(false)}>
-              取消
-            </Button>
-            <Button type="submit" size="sm" disabled={busy !== null}>
-              {busy === "replace" ? "生成中…" : "替换段落"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

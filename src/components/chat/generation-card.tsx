@@ -47,9 +47,9 @@ export function GenerationCard({
   const failed = res?.job.status === "failed";
 
   return (
-    <div className="w-full max-w-xl rounded-xl border bg-card p-4 shadow-sm">
+    <div className="w-full max-w-xl rounded-lg border bg-card p-4">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
           <Music2 className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -59,11 +59,9 @@ export function GenerationCard({
           </p>
         </div>
         {done && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/songs/${songId}`}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              详情
-            </Link>
+          <Button variant="outline" size="sm" render={<Link href={`/songs/${songId}`} />}>
+            <ExternalLink className="h-3.5 w-3.5" />
+            详情
           </Button>
         )}
       </div>
@@ -72,13 +70,12 @@ export function GenerationCard({
         <div className="mt-3 space-y-2">
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-violet-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-600" />
             </span>
             {res?.job.stage ?? "排队中…"} · {res?.job.progress ?? 0}%
           </p>
           <Progress value={res?.job.progress ?? 0} />
-          <p className="text-xs text-muted-foreground">通常需要 1-2 分钟，完成后自动出现在这里</p>
         </div>
       )}
       {failed && <p className="mt-3 text-sm text-destructive">{res?.job.error ?? "生成失败"}</p>}
@@ -94,8 +91,8 @@ export function GenerationCard({
                 onClick={() => play({ songId, variantId: v.id, url: v.audioUrl, title: v.title })}
                 className={
                   active
-                    ? "flex flex-col gap-1.5 rounded-lg border border-primary bg-primary/10 p-3 text-left transition-colors"
-                    : "flex flex-col gap-1.5 rounded-lg border bg-muted/30 p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
+                    ? "flex flex-col gap-1.5 rounded-md border border-primary bg-primary/10 p-3 text-left transition-colors"
+                    : "flex flex-col gap-1.5 rounded-md border bg-background p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
                 }
               >
                 <span className="flex items-center justify-between">

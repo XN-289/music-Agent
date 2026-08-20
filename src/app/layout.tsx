@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { PlayerBar } from "@/components/player/player-bar";
 import { Toaster } from "@/components/ui/sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
 
@@ -22,15 +17,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="zh-CN"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
-    >
+    <html lang="zh-CN" className={`${spaceGrotesk.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col pb-20">
-        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+        <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="text-lg">🎧</span> Music Agent
+            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <span className="text-[11px]">♪</span>
+              </span>
+              Music Agent
             </Link>
             <nav className="flex items-center gap-1 text-sm text-muted-foreground">
               <Link href="/" className="rounded-md px-3 py-1.5 transition-colors hover:bg-accent hover:text-foreground">

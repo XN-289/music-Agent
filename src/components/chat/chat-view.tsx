@@ -379,16 +379,6 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
       {isFirst && (
         <div className="mb-10 mt-8 text-center">
           <h1 className="text-3xl font-semibold tracking-tight">想做什么歌？</h1>
-          <p className="mt-2 text-muted-foreground">
-            用一句话描述你的灵感，AI 音乐制作人会帮你写歌词、定风格、生成完整歌曲
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full border px-2.5 py-1">💬 说灵感</span>
-            <span aria-hidden>→</span>
-            <span className="rounded-full border px-2.5 py-1">🎯 选方向</span>
-            <span aria-hidden>→</span>
-            <span className="rounded-full border px-2.5 py-1">🎧 听歌</span>
-          </div>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {SCENARIO_CHIPS.map((chip) => (
               <button
@@ -403,7 +393,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
           </div>
           {recentSongs && recentSongs.length > 0 && (
             <div className="mt-10 text-left">
-              <p className="text-sm text-muted-foreground">🎧 最近的作品，点开听听</p>
+              <p className="text-sm text-muted-foreground">最近的作品</p>
               <div className="mt-3 grid grid-cols-3 gap-3">
                 {recentSongs.map((s) => (
                   <SongCard key={s.id} song={s} />
@@ -429,17 +419,14 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
                     void sendPrompt(`就选「${opt.title}」这个方向`);
                   }}
                 />
+              ) : m.role === "assistant" ? (
+                <p className="max-w-[85%] whitespace-pre-wrap text-sm leading-relaxed">
+                  {m.text}
+                  {!m.done && <span className="ml-0.5 animate-pulse">▍</span>}
+                </p>
               ) : (
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/60",
-                  )}
-                >
-                  <p className="whitespace-pre-wrap">
-                    {m.text}
-                    {!m.done && <span className="ml-0.5 animate-pulse">▍</span>}
-                  </p>
+                <div className="max-w-[85%] rounded-lg bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground">
+                  <p className="whitespace-pre-wrap">{m.text}</p>
                 </div>
               ))}
             {m.tool && (
@@ -491,7 +478,7 @@ export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
             }}
           />
           <div className="flex items-center justify-between px-2 pb-1">
-            <span className="text-xs text-muted-foreground">pi Agent · 音乐生成与迭代</span>
+            <span className="text-xs text-muted-foreground">Enter 发送 · Shift+Enter 换行</span>
             {sending ? (
               <Button type="button" variant="outline" size="sm" onClick={onCancel}>
                 停止

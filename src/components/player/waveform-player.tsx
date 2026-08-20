@@ -30,9 +30,9 @@ export function WaveformPlayer({ url, variantId }: { url: string; variantId: str
       barWidth: 3,
       barGap: 2,
       barRadius: 2,
-      waveColor: "#52525b",
-      progressColor: "#a78bfa",
-      cursorColor: "#ffffff",
+      waveColor: "#d4d4d8",
+      progressColor: "#16a34a",
+      cursorColor: "#18181b",
       cursorWidth: 1,
     });
 

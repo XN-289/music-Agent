@@ -107,7 +107,7 @@ export function DirectionOptionCards({
                 disabled={disabled}
                 onClick={() => onSelect(opt)}
                 className={cn(
-                  "w-full rounded-xl border bg-card p-3 text-left transition-colors",
+                  "w-full rounded-lg border bg-card p-3 text-left transition-colors",
                   disabled
                     ? "cursor-not-allowed opacity-50"
                     : "hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -153,19 +153,15 @@ export function AssistantMessageText({
 }) {
   const segments = parseDirectionOptions(text);
   if (!segments) {
-    return (
-      <div className="max-w-[85%] rounded-2xl bg-muted/60 px-4 py-3">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
-      </div>
-    );
+    return <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>;
   }
   return (
     <div className="w-full">
       {segments.map((seg, i) =>
         seg.kind === "text" ? (
-          <div key={i} className="mb-2 max-w-[85%] rounded-2xl bg-muted/60 px-4 py-3">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{seg.text}</p>
-          </div>
+          <p key={i} className="mb-2 whitespace-pre-wrap text-sm leading-relaxed">
+            {seg.text}
+          </p>
         ) : (
           <DirectionOptionCards key={i} segments={[seg]} disabled={disabled} onSelect={onSelectOption} />
         ),

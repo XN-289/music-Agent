@@ -16,7 +16,6 @@ export default async function LibraryPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <ProcessingRefresher hasProcessing={hasProcessing} />
       <h1 className="text-2xl font-semibold">曲库</h1>
-      <p className="mt-1 text-sm text-muted-foreground">你生成过的所有歌曲（P0 本地存储）</p>
 
       {songs.length === 0 ? (
         <div className="mt-20 text-center text-muted-foreground">

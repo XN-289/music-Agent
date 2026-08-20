@@ -16,6 +16,22 @@ export interface SongCardData {
   createdAt: number;
 }
 
+// 封面渐变：专辑封面是界面上唯一的色彩来源（设计系统），按标题散列取色
+const COVER_GRADIENTS = [
+  "from-emerald-500/70 to-teal-700/60",
+  "from-amber-500/70 to-orange-700/60",
+  "from-rose-500/70 to-red-700/60",
+  "from-sky-500/70 to-blue-700/60",
+  "from-lime-500/70 to-emerald-700/60",
+  "from-cyan-500/70 to-sky-700/60",
+];
+
+function coverGradient(title: string): string {
+  let h = 0;
+  for (const c of title) h = (h * 31 + c.codePointAt(0)!) % 997;
+  return COVER_GRADIENTS[h % COVER_GRADIENTS.length];
+}
+
 export function SongCard({ song }: { song: SongCardData }) {
   const current = usePlayerStore((s) => s.current);
   const playing = usePlayerStore((s) => s.playing);
@@ -26,12 +42,14 @@ export function SongCard({ song }: { song: SongCardData }) {
     current != null && song.variants?.some((v) => v.id === current.variantId) === true;
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border bg-card transition-colors hover:border-primary/50">
+    <div className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-foreground/20">
       <Link href={`/songs/${song.id}`} className="block">
-        <div className="relative flex aspect-square items-center justify-center bg-gradient-to-br from-violet-600/60 to-fuchsia-600/40">
-          <Music2 className="h-10 w-10 text-white/70" />
+        <div
+          className={`relative flex aspect-square items-center justify-center bg-gradient-to-br ${coverGradient(song.title)}`}
+        >
+          <Music2 className="h-10 w-10 text-white/80" />
           {song.status === "processing" && (
-            <Badge className="absolute left-2 top-2">{song.progress}%</Badge>
+            <Badge className="absolute left-2 top-2 bg-white/90 text-foreground">{song.progress}%</Badge>
           )}
           {song.status === "failed" && (
             <Badge className="absolute left-2 top-2 bg-destructive text-white">失败</Badge>
@@ -47,7 +65,7 @@ export function SongCard({ song }: { song: SongCardData }) {
       {first && (
         <Button
           size="icon"
-          className="absolute bottom-16 right-2 h-9 w-9 rounded-full opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+          className="absolute bottom-16 right-2 h-9 w-9 rounded-full opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
           aria-label={isActive && playing ? "暂停" : "播放"}
           onClick={() =>
             play({ songId: song.id, variantId: first.id, url: first.audioUrl, title: song.title })
