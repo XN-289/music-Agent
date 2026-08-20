@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ExternalLink, Music2, Pause, Play } from "lucide-react";
 
-// 生成卡片：出现在聊天流中，轮询 /api/jobs/[id] 展示进度，
-// 完成后提供两个变体的即点播放（Suno 惯例：一次生成 2 个变体做 A/B）。
+// 生成卡片：出现在聊天流中，轮询 /api/jobs/[id] 展示阶段化进度，
+// 完成后提供两个变体的醒目试听卡片（Suno 惯例：一次生成 2 个变体做 A/B）。
 export function GenerationCard({
   jobId,
   songId,
@@ -54,7 +54,9 @@ export function GenerationCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{title}</p>
-          <p className="text-xs text-muted-foreground">{res?.job.stage ?? "排队中…"}</p>
+          <p className="text-xs text-muted-foreground">
+            {done ? "生成完成，试听两个变体" : failed ? "生成失败" : "正在制作中…"}
+          </p>
         </div>
         {done && (
           <Button variant="outline" size="sm" asChild>
@@ -66,29 +68,48 @@ export function GenerationCard({
         )}
       </div>
 
-      {!done && !failed && <Progress value={res?.job.progress ?? 0} className="mt-3" />}
+      {!done && !failed && (
+        <div className="mt-3 space-y-2">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-violet-500" />
+            </span>
+            {res?.job.stage ?? "排队中…"} · {res?.job.progress ?? 0}%
+          </p>
+          <Progress value={res?.job.progress ?? 0} />
+          <p className="text-xs text-muted-foreground">通常需要 1-2 分钟，完成后自动出现在这里</p>
+        </div>
+      )}
       {failed && <p className="mt-3 text-sm text-destructive">{res?.job.error ?? "生成失败"}</p>}
 
       {done && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {variants.map((v) => {
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {variants.map((v, i) => {
             const active = current?.variantId === v.id;
             return (
-              <Button
+              <button
                 key={v.id}
-                size="sm"
-                variant={active ? "default" : "outline"}
-                onClick={() =>
-                  play({ songId, variantId: v.id, url: v.audioUrl, title: v.title })
+                type="button"
+                onClick={() => play({ songId, variantId: v.id, url: v.audioUrl, title: v.title })}
+                className={
+                  active
+                    ? "flex flex-col gap-1.5 rounded-lg border border-primary bg-primary/10 p-3 text-left transition-colors"
+                    : "flex flex-col gap-1.5 rounded-lg border bg-muted/30 p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
                 }
               >
-                {active && playing ? (
-                  <Pause className="h-3.5 w-3.5" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
-                {v.id.toUpperCase()}
-              </Button>
+                <span className="flex items-center justify-between">
+                  <span className="text-xs font-semibold">变体 {i === 0 ? "A" : "B"}</span>
+                  {active && playing ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {active ? "正在播放" : "点击试听"} · {Math.round(v.durationSec || 0)}s
+                </span>
+              </button>
             );
           })}
         </div>

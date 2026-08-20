@@ -49,6 +49,7 @@ export function SongDetailClient({
   const [variantIdx, setVariantIdx] = useState(0);
   const current = usePlayerStore((s) => s.current);
   const playing = usePlayerStore((s) => s.playing);
+  const progressSec = usePlayerStore((s) => s.progressSec);
   const play = usePlayerStore((s) => s.play);
   const toggle = usePlayerStore((s) => s.toggle);
 
@@ -451,23 +452,47 @@ export function SongDetailClient({
       <Modal open={replaceOpen} onClose={() => setReplaceOpen(false)} title="替换段落">
         <form onSubmit={onSubmitReplace} className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            指定要替换的时间区间（秒），描述新的内容走向。可以在波形上播放定位时间点。
+            指定要替换的时间区间（秒），描述新的内容走向。播放到目标位置（点波形或歌词行跳转），再用「取当前」填入秒数。
           </p>
           <div className="flex gap-2">
-            <Input
-              type="number"
-              value={replaceStart}
-              onChange={(e) => setReplaceStart(e.target.value)}
-              placeholder="起始秒，如 10"
-              min={0}
-            />
-            <Input
-              type="number"
-              value={replaceEnd}
-              onChange={(e) => setReplaceEnd(e.target.value)}
-              placeholder="结束秒，如 20"
-              min={1}
-            />
+            <div className="relative flex-1">
+              <Input
+                type="number"
+                value={replaceStart}
+                onChange={(e) => setReplaceStart(e.target.value)}
+                placeholder="起始秒，如 10"
+                min={0}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
+                onClick={() => setReplaceStart(String(Math.max(0, Math.round(progressSec))))}
+                title="取当前播放位置"
+              >
+                ⏱ 取当前
+              </Button>
+            </div>
+            <div className="relative flex-1">
+              <Input
+                type="number"
+                value={replaceEnd}
+                onChange={(e) => setReplaceEnd(e.target.value)}
+                placeholder="结束秒，如 20"
+                min={1}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-[11px]"
+                onClick={() => setReplaceEnd(String(Math.max(1, Math.round(progressSec))))}
+                title="取当前播放位置"
+              >
+                ⏱ 取当前
+              </Button>
+            </div>
           </div>
           <Textarea
             value={replacePrompt}

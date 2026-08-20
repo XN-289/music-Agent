@@ -5,9 +5,21 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { GenerationCard } from "./generation-card";
+import { AssistantMessageText } from "./direction-options";
+import { SongCard, type SongCardData } from "@/components/song/song-card";
 import { cn } from "@/lib/utils";
 
-const IDEA_CHIPS = ["🌙 深夜 emo 说唱", "🌊 夏日出游 dreamy pop", "🎬 电影感史诗配乐", "☕ 咖啡馆 lo-fi"];
+// 场景 chips 来自 harness 场景库：新手想的是场景不是风格
+const SCENARIO_CHIPS = [
+  "💔 分手纪念",
+  "🌙 深夜一个人听",
+  "🎁 生日祝福",
+  "📱 短视频 BGM",
+  "🚗 开车旅行",
+  "🎓 毕业季",
+  "🧧 新年祝福",
+  "📖 学习专注",
+];
 const CHAT_KEY = "music-agent-chat-id";
 
 interface ToolMsg {
@@ -102,7 +114,7 @@ interface HistoryRow {
   }>;
 }
 
-export function ChatView() {
+export function ChatView({ recentSongs }: { recentSongs?: SongCardData[] }) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -370,8 +382,15 @@ export function ChatView() {
           <p className="mt-2 text-muted-foreground">
             用一句话描述你的灵感，AI 音乐制作人会帮你写歌词、定风格、生成完整歌曲
           </p>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full border px-2.5 py-1">💬 说灵感</span>
+            <span aria-hidden>→</span>
+            <span className="rounded-full border px-2.5 py-1">🎯 选方向</span>
+            <span aria-hidden>→</span>
+            <span className="rounded-full border px-2.5 py-1">🎧 听歌</span>
+          </div>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {IDEA_CHIPS.map((chip) => (
+            {SCENARIO_CHIPS.map((chip) => (
               <button
                 key={chip}
                 type="button"
@@ -382,6 +401,16 @@ export function ChatView() {
               </button>
             ))}
           </div>
+          {recentSongs && recentSongs.length > 0 && (
+            <div className="mt-10 text-left">
+              <p className="text-sm text-muted-foreground">🎧 最近的作品，点开听听</p>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                {recentSongs.map((s) => (
+                  <SongCard key={s.id} song={s} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -391,19 +420,28 @@ export function ChatView() {
             key={m.id}
             className={cn("flex flex-col gap-2", m.role === "user" ? "items-end" : "items-start")}
           >
-            {m.text.length > 0 && (
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                  m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/60",
-                )}
-              >
-                <p className="whitespace-pre-wrap">
-                  {m.text}
-                  {!m.done && <span className="ml-0.5 animate-pulse">▍</span>}
-                </p>
-              </div>
-            )}
+            {m.text.length > 0 &&
+              (m.role === "assistant" && m.done ? (
+                <AssistantMessageText
+                  text={m.text}
+                  disabled={sending}
+                  onSelectOption={(opt) => {
+                    void sendPrompt(`就选「${opt.title}」这个方向`);
+                  }}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/60",
+                  )}
+                >
+                  <p className="whitespace-pre-wrap">
+                    {m.text}
+                    {!m.done && <span className="ml-0.5 animate-pulse">▍</span>}
+                  </p>
+                </div>
+              ))}
             {m.tool && (
               <div className="w-full">
                 {m.tool.jobId && m.tool.songId ? (
